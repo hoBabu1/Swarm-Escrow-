@@ -2,6 +2,9 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+# The Escrow struct's public getter now returns enough fields that solc's
+# legacy codegen hits "stack too deep"; via-ir avoids that.
+via_ir = true
 remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "forge-std/=lib/forge-std/src/",
