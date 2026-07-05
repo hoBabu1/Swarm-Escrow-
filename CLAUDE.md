@@ -150,13 +150,13 @@ create table feedback_messages (
 
 ## Environment Variables (`.env`, never commit)
 
-```
 ORACLE_PRIVATE_KEY=
 ANTHROPIC_API_KEY=
 RPC_URL_TESTNET=https://rpc.bohr.life
+CONTRACT_ADDRESS=0xc45d948467Dd39278a456D4341C00C14F31300b2
 SUPABASE_URL=
-SUPABASE_ANON_KEY=
-```
+SUPABASE_SERVICE_ROLE_KEY=
+POLL_INTERVAL_SECONDS=10
 
 On Render, these are set in the platform's environment variable dashboard, not committed to `.env`.
 

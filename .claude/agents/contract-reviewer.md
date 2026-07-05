@@ -18,9 +18,6 @@ When reviewing a change:
 4. Flag anything that deviates from OpenZeppelin/industry-standard patterns.
 5. Report findings by severity (critical/medium/low), with the exact line
    and a one-line fix suggestion. Do NOT edit files yourself — read-only.
-Add the following to .claude/agents/contract-reviewer.md, appended after 
-the existing numbered checklist:
-
 6. This is escrow logic holding real user funds (BOT native token) — treat 
    every finding here as higher stakes than a typical code review. If in 
    doubt about severity, round UP not down.
