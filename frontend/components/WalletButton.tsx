@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useBalance } from "wagmi";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
+import { botChainMainnet, botChainTestnet } from "@/lib/chains";
 
 function WalletBalancePill({ address, enabled }: { address: `0x${string}` | undefined; enabled: boolean }) {
   const { data, isLoading, isError } = useBalance({
@@ -20,6 +22,20 @@ function WalletBalancePill({ address, enabled }: { address: `0x${string}` | unde
 }
 
 export function WalletButton() {
+  const [chainMenuOpen, setChainMenuOpen] = useState(false);
+  const chainMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (chainMenuRef.current && !chainMenuRef.current.contains(event.target as Node)) {
+        setChainMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   return (
     <ConnectButton.Custom>
       {({ account, chain, openAccountModal, openConnectModal, openChainModal, mounted }) => {
@@ -63,14 +79,50 @@ export function WalletButton() {
 
               return (
                 <>
-                  <button
-                    onClick={openChainModal}
-                    type="button"
-                    className="flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-[#eafff5] transition hover:bg-white/15 active:bg-white/20"
-                  >
-                    {chain.name}
-                    <ChevronDown size={14} />
-                  </button>
+                  <div className="relative" ref={chainMenuRef}>
+                    <button
+                      onClick={() => setChainMenuOpen((prev) => !prev)}
+                      type="button"
+                      className="flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-[#eafff5] transition hover:bg-white/15 active:bg-white/20"
+                    >
+                      {chain.name}
+                      <ChevronDown size={14} />
+                    </button>
+                    {chainMenuOpen && (
+                      <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-72 max-w-[calc(100vw-2rem)] rounded-3xl border border-white/10 bg-[#1d1d24] p-5 shadow-2xl">
+                        <div className="mb-5 flex items-center justify-between">
+                          <div className="text-xl font-bold text-white">Switch Networks</div>
+                          <button
+                            onClick={() => setChainMenuOpen(false)}
+                            type="button"
+                            className="grid size-9 place-items-center rounded-full bg-white/10 text-[#b9bac5] transition hover:bg-white/15 hover:text-white"
+                            aria-label="Close network menu"
+                          >
+                            <X size={20} />
+                          </button>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center justify-between rounded-2xl bg-aurora-green px-4 py-3 text-[#06120c]">
+                            <span className="text-base font-bold">{botChainTestnet.name}</span>
+                            <span className="flex items-center gap-2 text-sm">
+                              Connected
+                              <span className="size-2.5 rounded-full bg-[#22e800]" />
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            disabled
+                            className="flex cursor-not-allowed items-center justify-between rounded-2xl bg-white/10 px-4 py-3 text-left opacity-70"
+                          >
+                            <span className="text-base font-bold text-white">{botChainMainnet.name}</span>
+                            <span className="font-mono text-[10px] text-[#9da0ad]">
+                              coming soon
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   <WalletBalancePill address={account.address as `0x${string}`} enabled={!!connected} />
                   <button
                     onClick={openAccountModal}

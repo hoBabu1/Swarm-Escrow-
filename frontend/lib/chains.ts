@@ -15,7 +15,7 @@ export const botChainTestnet = defineChain({
 
 export const botChainMainnet = defineChain({
   id: 677,
-  name: "BOT Chain",
+  name: "BOT Chain Mainnet",
   nativeCurrency: { name: "BOT", symbol: "BOT", decimals: 18 },
   rpcUrls: {
     default: { http: ["https://rpc.botchain.ai"] },
