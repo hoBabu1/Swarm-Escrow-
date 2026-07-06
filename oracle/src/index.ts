@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { env } from "./config/env.js";
 import { logger } from "./lib/logger.js";
 import { ContractEventPoller } from "./contract/events.js";
@@ -8,6 +9,18 @@ import { runAutoActionsScan } from "./pipeline/autoActions.js";
 logger.info("oracle_starting", {
   contractAddress: env.CONTRACT_ADDRESS,
   pollIntervalSeconds: env.POLL_INTERVAL_SECONDS,
+});
+
+// Render's free Web Service tier requires the process to bind to
+// process.env.PORT and answer HTTP requests — this is a health check only,
+// not a real API, and runs alongside the polling loop below, not instead of it.
+const port = Number(process.env.PORT) || 3000;
+const healthServer = createServer((_req, res) => {
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ status: "oracle running" }));
+});
+healthServer.listen(port, () => {
+  logger.info("health_server_listening", { port });
 });
 
 const poller = new ContractEventPoller();
@@ -45,6 +58,7 @@ async function shutdown(signal: string): Promise<void> {
   logger.info("oracle_shutting_down", { signal });
   poller.stop();
   clearInterval(scanTimer);
+  healthServer.close();
   // Give in-flight work (event tick + auto-actions scan, and any handler
   // either started) a chance to finish — Render sends SIGTERM on every
   // redeploy, so this runs routinely, not just on rare crashes. Bounded so a
