@@ -9,7 +9,7 @@ const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 // guidance (~$5 total). Swap to "claude-sonnet-5" for the final demo run.
 // Confirm before changing if unsure (CLAUDE.md: "AI Agent Calls").
 // ============================================================================
-export const AGENT_MODEL = "claude-haiku-4-5-20251001";
+export const AGENT_MODEL: string = "claude-haiku-4-5-20251001";
 
 if (AGENT_MODEL !== "claude-sonnet-5") {
   console.warn(
