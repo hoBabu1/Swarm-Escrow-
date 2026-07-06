@@ -1,0 +1,874 @@
+'use client';
+
+import { useRouter, useParams } from 'next/navigation';
+import { useAccount, useWriteContract } from 'wagmi';
+import { useState, useEffect, useRef } from 'react';
+import { formatEther, keccak256, toBytes } from 'viem';
+import { swarmEscrowConfig } from '@/lib/contract';
+import { botChainTestnet } from '@/lib/chains';
+import { useEscrow, EscrowStatus, escrowExists } from '@/lib/hooks/useEscrow';
+import { useAgentVerdicts, AgentRoleName } from '@/lib/hooks/useAgentVerdicts';
+import { useHashVerifiedText } from '@/lib/hooks/useHashVerifiedText';
+import { useTxLifecycle } from '@/lib/hooks/useTxLifecycle';
+import { STATUS_LABELS, truncate, sameAddress } from '@/lib/escrowFormat';
+import { TxLifecycleStatus } from '@/components/TxLifecycleStatus';
+
+const EXPLORER_BASE = botChainTestnet.blockExplorers.default.url;
+
+function formatCountdown(ms: number) {
+  if (ms <= 0) return '00:00:00';
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+// Real contract states only — there is no distinct "Reviewed" status on-chain (agent votes
+// accumulate silently until resolve() tallies 2-of-3), so that step is folded into "Submitted".
+const STEPS: { status: EscrowStatus; label: string }[] = [
+  { status: EscrowStatus.Created, label: 'Created' },
+  { status: EscrowStatus.DeliverableSubmitted, label: 'Submitted' },
+  { status: EscrowStatus.PendingChallenge, label: 'Challenge' },
+  { status: EscrowStatus.Resolved, label: 'Resolved' },
+];
+
+function StepTracker({ status }: { status: EscrowStatus }) {
+  const isTerminal = status === EscrowStatus.Resolved || status === EscrowStatus.Refunded;
+  // Challenged is a sub-state of the Challenge step; Refunded is a terminal alternate of Resolved.
+  const effectiveStatus = status === EscrowStatus.Challenged ? EscrowStatus.PendingChallenge : status;
+  const currentIndex = isTerminal ? STEPS.length - 1 : STEPS.findIndex((s) => s.status === effectiveStatus);
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', marginBottom: 32 }}>
+      {STEPS.map((step, i) => {
+        const done = i < currentIndex || isTerminal;
+        const current = i === currentIndex && !isTerminal;
+        const label = step.status === EscrowStatus.PendingChallenge && status === EscrowStatus.Challenged ? 'Challenged' : step.label;
+        return (
+          <div key={step.label} style={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : 'unset' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{
+                width: 22, height: 22, borderRadius: '50%',
+                background: done ? '#4dffb8' : current ? '#4d9fff' : 'rgba(255,255,255,0.08)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: done ? '#06120c' : current ? '#03101f' : '#6a8f80',
+                fontSize: 10, fontWeight: 700,
+              }}>
+                {done ? '✓' : i + 1}
+              </div>
+              <span style={{ fontSize: 9, color: done ? '#4dffb8' : current ? '#4d9fff' : '#6a8f80', marginTop: 6, fontFamily: "'JetBrains Mono', monospace", textAlign: 'center', whiteSpace: 'nowrap' }}>
+                {label}
+              </span>
+            </div>
+            {i < STEPS.length - 1 && (
+              <div style={{ flex: 1, height: 2, background: i < currentIndex ? '#4dffb8' : 'rgba(255,255,255,0.1)', marginBottom: 16, minWidth: 20 }} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+const VERDICT_REASONING_LIMIT = 100;
+const SPEC_LIMIT = 180;
+
+function HashMismatchWarning() {
+  return (
+    <div style={{ background: 'rgba(255,90,90,0.1)', border: '1px solid rgba(255,90,90,0.35)', borderRadius: 8, padding: '8px 10px', fontSize: 10, color: '#ff9a9a', marginBottom: 10 }}>
+      ⚠ This text doesn&apos;t match the on-chain hash — it may have been tampered with or corrupted off-chain. Do not trust this content.
+    </div>
+  );
+}
+
+function VerdictCard({
+  agent,
+  hasVoted,
+  approved,
+  reasoning,
+  loading,
+  fetchError,
+  matchesHash,
+  expanded,
+  onToggle,
+}: {
+  agent: AgentRoleName;
+  hasVoted: boolean;
+  approved: boolean;
+  reasoning: string | undefined;
+  loading: boolean;
+  fetchError: string | null;
+  matchesHash: boolean | undefined;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  if (!hasVoted) {
+    return (
+      <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16 }}>
+        <div style={{ fontSize: 12, color: '#eafff5', fontWeight: 500, marginBottom: 10 }}>{agent}</div>
+        <p style={{ fontSize: 11, color: '#6a8f80', margin: 0 }}>Awaiting vote</p>
+      </div>
+    );
+  }
+
+  const text = reasoning ?? '';
+  const isLong = text.length > VERDICT_REASONING_LIMIT;
+  const displayText = isLong && !expanded ? `${text.slice(0, VERDICT_REASONING_LIMIT)}...` : text;
+
+  return (
+    <div style={{ background: 'rgba(6,10,12,0.5)', border: `1px solid ${approved ? 'rgba(77,255,184,0.25)' : 'rgba(255,180,77,0.25)'}`, borderRadius: 12, padding: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <span style={{ fontSize: 12, color: '#eafff5', fontWeight: 500 }}>{agent}</span>
+        <span style={{ color: approved ? '#4dffb8' : '#ffb44d', fontSize: 14 }}>{approved ? '✓' : '✕'}</span>
+      </div>
+      {loading ? (
+        <p style={{ fontSize: 11, color: '#6a8f80', margin: 0 }}>Loading reasoning...</p>
+      ) : fetchError ? (
+        <p style={{ fontSize: 11, color: '#ff9a9a', margin: 0 }}>Couldn&apos;t load reasoning text — {fetchError}</p>
+      ) : matchesHash === false ? (
+        <HashMismatchWarning />
+      ) : (
+        <>
+          <p style={{ fontSize: 11, color: '#a8d4c0', margin: '0 0 10px', lineHeight: 1.5 }}>{displayText || 'Reasoning text unavailable'}</p>
+          {isLong && (
+            <span
+              onClick={onToggle}
+              onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
+              style={{ display: 'block', color: '#4d9fff', fontSize: 11, cursor: 'pointer', textDecoration: 'none' }}
+            >
+              {expanded ? 'Show less' : 'Show more'}
+            </span>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+export default function EscrowDetailPage() {
+  const router = useRouter();
+  const params = useParams();
+  const { address } = useAccount();
+  const [now, setNow] = useState(Date.now());
+  const [specExpanded, setSpecExpanded] = useState(false);
+  const [expandedVerdicts, setExpandedVerdicts] = useState<Record<string, boolean>>({});
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [repoUrl, setRepoUrl] = useState('');
+  const [commitHash, setCommitHash] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<{ verified: boolean; fileCount?: number; lastCommitDate?: string; files?: string[]; error?: string } | null>(null);
+  const verifyRequestId = useRef(0);
+
+  const [challengeModalOpen, setChallengeModalOpen] = useState(false);
+  const [challengeReason, setChallengeReason] = useState('');
+  const [challengeSaving, setChallengeSaving] = useState(false);
+  const [challengeSubmitError, setChallengeSubmitError] = useState<string | null>(null);
+
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackSaving, setFeedbackSaving] = useState(false);
+  const [feedbackSubmitError, setFeedbackSubmitError] = useState<string | null>(null);
+
+  const rawId = Array.isArray(params.id) ? params.id[0] : params.id;
+  const isValidId = rawId !== undefined && /^\d+$/.test(rawId);
+  const escrowId = isValidId ? BigInt(rawId) : undefined;
+
+  const { escrow, isLoading, isError, refetch } = useEscrow(isValidId ? rawId : undefined);
+  const { verdicts, seniorArbiterVote, isLoading: verdictsLoading, isError: verdictsError, refetch: refetchVerdicts } = useAgentVerdicts(escrowId);
+
+  const { writeContract, data: submitTxHash, isPending: isSubmitApproving, error: submitWriteError, reset: resetSubmitWrite } = useWriteContract();
+  const { txState, isConfirmed: isSubmitConfirmed } = useTxLifecycle(submitTxHash, isSubmitApproving);
+
+  useEffect(() => {
+    if (isSubmitConfirmed) {
+      refetch();
+      refetchVerdicts();
+    }
+  }, [isSubmitConfirmed, refetch, refetchVerdicts]);
+
+  const { writeContract: writeChallenge, data: challengeTxHash, isPending: isChallengeApproving, error: challengeWriteError, reset: resetChallengeWrite } = useWriteContract();
+  const { txState: challengeTxState, isConfirmed: isChallengeConfirmed } = useTxLifecycle(challengeTxHash, isChallengeApproving);
+
+  useEffect(() => {
+    if (isChallengeConfirmed) {
+      refetch();
+      refetchVerdicts();
+    }
+  }, [isChallengeConfirmed, refetch, refetchVerdicts]);
+
+  const { writeContract: writeFeedback, data: feedbackTxHash, isPending: isFeedbackApproving, error: feedbackWriteError, reset: resetFeedbackWrite } = useWriteContract();
+  const { txState: feedbackTxState, isConfirmed: isFeedbackConfirmed } = useTxLifecycle(feedbackTxHash, isFeedbackApproving);
+
+  useEffect(() => {
+    if (isFeedbackConfirmed) {
+      refetch();
+    }
+  }, [isFeedbackConfirmed, refetch]);
+
+  // Only the PendingChallenge countdown depends on `now` — avoid re-rendering the whole
+  // page every second (verdict cards, spec panel, hash-verification state, etc.) otherwise.
+  const isCountingDown = escrow?.status === EscrowStatus.PendingChallenge;
+  useEffect(() => {
+    if (!isCountingDown) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [isCountingDown]);
+
+  const specText = useHashVerifiedText({
+    table: 'escrow_specs',
+    match: escrowId !== undefined ? { escrow_id: Number(escrowId) } : {},
+    textColumn: 'spec_text',
+    onChainHash: escrow?.specHash,
+  });
+
+  const reviewerText = useHashVerifiedText({
+    table: 'verdicts',
+    match: escrowId !== undefined ? { escrow_id: Number(escrowId), agent_role: 'reviewer' } : {},
+    textColumn: 'reasoning_text',
+    onChainHash: verdicts[0]?.hasVoted ? verdicts[0].reasoningHash : undefined,
+  });
+  const fraudSanityText = useHashVerifiedText({
+    table: 'verdicts',
+    match: escrowId !== undefined ? { escrow_id: Number(escrowId), agent_role: 'fraud_sanity' } : {},
+    textColumn: 'reasoning_text',
+    onChainHash: verdicts[1]?.hasVoted ? verdicts[1].reasoningHash : undefined,
+  });
+  const arbiterText = useHashVerifiedText({
+    table: 'verdicts',
+    match: escrowId !== undefined ? { escrow_id: Number(escrowId), agent_role: 'arbiter' } : {},
+    textColumn: 'reasoning_text',
+    onChainHash: verdicts[2]?.hasVoted ? verdicts[2].reasoningHash : undefined,
+  });
+  const seniorArbiterText = useHashVerifiedText({
+    table: 'verdicts',
+    match: escrowId !== undefined ? { escrow_id: Number(escrowId), agent_role: 'senior_arbiter' } : {},
+    textColumn: 'reasoning_text',
+    onChainHash: seniorArbiterVote.hasVoted ? seniorArbiterVote.reasoningHash : undefined,
+  });
+
+  const verdictTexts = [reviewerText, fraudSanityText, arbiterText];
+
+  if (!isValidId) {
+    return (
+      <div style={{ background: '#060a0c', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a8d4c0', fontFamily: "'Sora', sans-serif" }}>
+        Invalid escrow ID.
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div style={{ background: '#060a0c', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6a8f80', fontFamily: "'Sora', sans-serif" }}>
+        Loading escrow...
+      </div>
+    );
+  }
+
+  if (isError || !escrowExists(escrow)) {
+    return (
+      <div style={{ background: '#060a0c', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: '#a8d4c0', fontFamily: "'Sora', sans-serif" }}>
+        <div>Escrow not found.</div>
+        <div onClick={() => router.push('/dashboard')} style={{ color: '#4d9fff', fontSize: 12, cursor: 'pointer' }}>← Back to dashboard</div>
+      </div>
+    );
+  }
+
+  const escrowData = escrow!;
+  const isClient = sameAddress(address, escrowData.client);
+  const isWorker = sameAddress(address, escrowData.worker);
+  const losingPartyIsClient = escrowData.tentativeApproved;
+  const canChallenge =
+    escrowData.status === EscrowStatus.PendingChallenge &&
+    !escrowData.hasChallenged &&
+    now < Number(escrowData.challengeDeadline) * 1000 &&
+    ((losingPartyIsClient && isClient) || (!losingPartyIsClient && isWorker));
+  const countdownMs = Number(escrowData.challengeDeadline) * 1000 - now;
+  // The contract reverts submitDeliverable once block.timestamp > deadline — check client-side
+  // so a past-deadline submission surfaces a clear message instead of a wallet-level revert.
+  const isPastDeadline = now > Number(escrowData.deadline) * 1000;
+  const alreadyLeftFeedback = (isClient && escrowData.hasClientFeedback) || (isWorker && escrowData.hasWorkerFeedback);
+
+  const isSpecLong = (specText.text ?? '').length > SPEC_LIMIT;
+  const displaySpec = isSpecLong && !specExpanded ? `${(specText.text ?? '').slice(0, SPEC_LIMIT)}...` : specText.text;
+
+  const toggleVerdict = (agent: string) => {
+    setExpandedVerdicts((prev) => ({ ...prev, [agent]: !prev[agent] }));
+  };
+
+  const canSubmitDeliverable = verifyResult !== null && verifyResult.verified === true && txState === 'idle' && !isPastDeadline;
+
+  const handleChallenge = () => {
+    setChallengeModalOpen(true);
+  };
+
+  const handleLeaveFeedback = () => {
+    setFeedbackModalOpen(true);
+  };
+
+  const resetChallengeModal = () => {
+    setChallengeModalOpen(false);
+    setChallengeReason('');
+    setChallengeSaving(false);
+    setChallengeSubmitError(null);
+    resetChallengeWrite();
+  };
+
+  const handleSubmitChallenge = async () => {
+    if (challengeReason.trim().length === 0 || challengeSaving || challengeTxState !== 'idle' || !address || escrowId === undefined) return;
+
+    setChallengeSubmitError(null);
+    setChallengeSaving(true);
+
+    const reasoningHash = keccak256(toBytes(challengeReason));
+    try {
+      const res = await fetch('/api/challenge-docs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          escrowId: escrowId.toString(),
+          challengerAddress: address,
+          documentText: challengeReason,
+          documentHash: reasoningHash,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setChallengeSubmitError(body.error ?? 'Failed to save challenge document');
+        setChallengeSaving(false);
+        return;
+      }
+    } catch {
+      setChallengeSubmitError("Couldn't reach the server to save the challenge document");
+      setChallengeSaving(false);
+      return;
+    }
+
+    setChallengeSaving(false);
+    writeChallenge({
+      ...swarmEscrowConfig,
+      functionName: 'challenge',
+      args: [escrowId, reasoningHash],
+    });
+  };
+
+  const resetFeedbackModal = () => {
+    setFeedbackModalOpen(false);
+    setFeedbackRating(0);
+    setFeedbackText('');
+    setFeedbackSaving(false);
+    setFeedbackSubmitError(null);
+    resetFeedbackWrite();
+  };
+
+  const handleSubmitFeedback = async () => {
+    if (feedbackRating === 0 || feedbackSaving || feedbackTxState !== 'idle' || !address || escrowId === undefined) return;
+
+    setFeedbackSubmitError(null);
+    setFeedbackSaving(true);
+
+    // The contract has no separate on-chain rating field — the rating is embedded in the
+    // hashed text itself, and extracted back out of the Supabase-stored full text for display.
+    const combined = `${feedbackRating}/5 — ${feedbackText}`;
+    const messageHash = keccak256(toBytes(combined));
+    try {
+      const res = await fetch('/api/feedback-messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          escrowId: escrowId.toString(),
+          senderAddress: address,
+          messageText: combined,
+          messageHash,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setFeedbackSubmitError(body.error ?? 'Failed to save feedback message');
+        setFeedbackSaving(false);
+        return;
+      }
+    } catch {
+      setFeedbackSubmitError("Couldn't reach the server to save the feedback message");
+      setFeedbackSaving(false);
+      return;
+    }
+
+    setFeedbackSaving(false);
+    writeFeedback({
+      ...swarmEscrowConfig,
+      functionName: 'leaveFeedback',
+      args: [escrowId, messageHash],
+    });
+  };
+
+  const resetSubmitModal = () => {
+    verifyRequestId.current += 1;
+    setModalOpen(false);
+    setRepoUrl('');
+    setCommitHash('');
+    setVerifyResult(null);
+    setVerifying(false);
+    resetSubmitWrite();
+  };
+
+  const handleRepoUrlChange = (value: string) => {
+    setRepoUrl(value);
+    setVerifyResult(null);
+    verifyRequestId.current += 1;
+  };
+
+  const handleCommitHashChange = (value: string) => {
+    setCommitHash(value);
+    setVerifyResult(null);
+    verifyRequestId.current += 1;
+  };
+
+  const handleVerifyCommit = async () => {
+    const thisRequestId = (verifyRequestId.current += 1);
+    setVerifying(true);
+    try {
+      const res = await fetch('/api/verify-commit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repoUrl, commitHash }),
+      });
+      const data = await res.json();
+      if (thisRequestId !== verifyRequestId.current) return;
+      setVerifyResult(data);
+    } catch {
+      if (thisRequestId !== verifyRequestId.current) return;
+      setVerifyResult({ verified: false, error: "Couldn't reach GitHub, try again" });
+    } finally {
+      if (thisRequestId === verifyRequestId.current) setVerifying(false);
+    }
+  };
+
+  const handleSubmitDeliverable = () => {
+    if (!canSubmitDeliverable || escrowId === undefined) return;
+    writeContract({
+      ...swarmEscrowConfig,
+      functionName: 'submitDeliverable',
+      args: [escrowId, repoUrl, commitHash],
+    });
+  };
+
+  return (
+    <div style={{ background: '#060a0c', position: 'relative', minHeight: '100vh', fontFamily: "'Sora', sans-serif" }}>
+      <div style={{ position: 'relative', zIndex: 1, padding: '24px 32px', maxWidth: 720, margin: '0 auto' }}>
+        <div onClick={() => router.push('/dashboard')} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20, color: '#8fb5a8', fontSize: 12, cursor: 'pointer' }}>
+          ← Back to dashboard
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28, flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 20, color: '#eafff5', fontWeight: 700, margin: '0 0 6px' }}>
+              Escrow #{rawId}
+            </h1>
+            <div style={{ fontSize: 12, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace" }}>
+              {formatEther(escrowData.amount)} BOT · worker {truncate(escrowData.worker)}
+            </div>
+          </div>
+          <span style={{ background: 'rgba(77,159,255,0.12)', color: '#4d9fff', fontSize: 11, padding: '5px 12px', borderRadius: 100, fontFamily: "'JetBrains Mono', monospace" }}>
+            {STATUS_LABELS[escrowData.status]}
+          </span>
+        </div>
+
+        <StepTracker status={escrowData.status} />
+
+        <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16, marginBottom: 32 }}>
+          <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 8 }}>Deliverable spec</div>
+          {specText.loading ? (
+            <p style={{ fontSize: 12, color: '#6a8f80', margin: 0 }}>Loading spec...</p>
+          ) : specText.error ? (
+            <p style={{ fontSize: 12, color: '#ff9a9a', margin: 0 }}>Couldn&apos;t load spec text — {specText.error}</p>
+          ) : specText.matchesHash === false ? (
+            <HashMismatchWarning />
+          ) : (
+            <>
+              <p style={{ fontSize: 13, color: '#c4dcd0', margin: 0, lineHeight: 1.5 }}>{displaySpec || 'Spec text unavailable'}</p>
+              {isSpecLong && (
+                <span
+                  onClick={() => setSpecExpanded((prev) => !prev)}
+                  onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
+                  style={{ display: 'block', color: '#4d9fff', fontSize: 11, cursor: 'pointer', textDecoration: 'none', marginTop: 8 }}
+                >
+                  {specExpanded ? 'Show less' : 'Show more'}
+                </span>
+              )}
+            </>
+          )}
+        </div>
+
+        <div style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", marginBottom: 10 }}>
+          Agent verdicts · {verdicts.filter((v) => v.hasVoted && v.approved).length} of 3 approve
+        </div>
+        {verdictsError && (
+          <div style={{ background: 'rgba(255,90,90,0.1)', border: '1px solid rgba(255,90,90,0.35)', borderRadius: 8, padding: '10px 12px', fontSize: 11, color: '#ff9a9a', marginBottom: 12 }}>
+            Couldn&apos;t read agent verdicts from the chain — the panel below may not reflect real votes yet. Try refreshing.
+          </div>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 32 }}>
+          {verdicts.map((v, i) => (
+            <VerdictCard
+              key={v.agent}
+              agent={v.agent}
+              hasVoted={v.hasVoted}
+              approved={v.approved}
+              reasoning={verdictTexts[i].text}
+              loading={verdictsLoading || verdictTexts[i].loading}
+              fetchError={verdictTexts[i].error}
+              matchesHash={verdictTexts[i].matchesHash}
+              expanded={!!expandedVerdicts[v.agent]}
+              onToggle={() => toggleVerdict(v.agent)}
+            />
+          ))}
+        </div>
+
+        {seniorArbiterVote.hasVoted && (
+          <div style={{ background: 'rgba(255,180,77,0.08)', border: '1px solid rgba(255,180,77,0.3)', borderRadius: 12, padding: 16, marginBottom: 32 }}>
+            <div style={{ fontSize: 11, color: '#ffb44d', fontFamily: "'JetBrains Mono', monospace", marginBottom: 8, textTransform: 'uppercase' }}>
+              Senior Arbiter · Final binding verdict
+            </div>
+            {seniorArbiterText.loading ? (
+              <p style={{ fontSize: 12, color: '#6a8f80', margin: 0 }}>Loading reasoning...</p>
+            ) : seniorArbiterText.error ? (
+              <p style={{ fontSize: 12, color: '#ff9a9a', margin: 0 }}>Couldn&apos;t load reasoning text — {seniorArbiterText.error}</p>
+            ) : seniorArbiterText.matchesHash === false ? (
+              <HashMismatchWarning />
+            ) : (
+              <p style={{ fontSize: 13, color: '#eafff5', margin: 0, lineHeight: 1.5 }}>{seniorArbiterText.text || 'Reasoning text unavailable'}</p>
+            )}
+          </div>
+        )}
+
+        {isWorker && escrowData.status === EscrowStatus.Created && (
+          <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(77,255,184,0.25)', borderRadius: 12, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
+            <div>
+              <div style={{ fontSize: 12, color: '#eafff5', fontWeight: 500, marginBottom: 4 }}>You&apos;re assigned as worker</div>
+              <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace" }}>Submit your finished repo to move this escrow into review.</div>
+            </div>
+            <button onClick={() => setModalOpen(true)} style={{ background: '#4dffb8', color: '#06120c', border: 'none', padding: '10px 20px', borderRadius: 100, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              Submit deliverable
+            </button>
+          </div>
+        )}
+
+        {escrowData.status === EscrowStatus.PendingChallenge && (
+          <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(77,159,255,0.25)', borderRadius: 12, padding: 16, marginBottom: 32 }}>
+            <div style={{ fontSize: 12, color: '#eafff5', fontWeight: 500, marginBottom: 4 }}>Challenge window open</div>
+
+            <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', margin: '8px 0' }}>
+              {['HH', 'MM', 'SS'].map((unit, idx) => {
+                const parts = formatCountdown(countdownMs).split(':');
+                return (
+                  <div key={unit} style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 28, fontWeight: 700, color: '#4d9fff', background: 'rgba(77,159,255,0.08)', padding: '6px 12px', borderRadius: 8, minWidth: 52, textAlign: 'center', display: 'inline-block' }}>
+                      {parts[idx]}
+                    </span>
+                    {idx < 2 && <span style={{ color: '#4d9fff', fontSize: 20 }}>:</span>}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: canChallenge ? 12 : 0 }}>
+              tentative outcome: {escrowData.tentativeApproved ? 'worker paid' : 'client refunded'}
+            </div>
+
+            {canChallenge && (
+              <button onClick={handleChallenge} style={{ background: 'transparent', color: '#ffb44d', border: '1px solid rgba(255,180,77,0.4)', padding: '9px 18px', borderRadius: 100, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                Raise challenge
+              </button>
+            )}
+          </div>
+        )}
+
+        {(escrowData.status === EscrowStatus.Resolved || escrowData.status === EscrowStatus.Refunded) && (isClient || isWorker) && (
+          <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(77,255,184,0.25)', borderRadius: 12, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ fontSize: 12, color: '#eafff5', fontWeight: 500 }}>Escrow {escrowData.status === EscrowStatus.Resolved ? 'resolved' : 'refunded'}</div>
+            {alreadyLeftFeedback ? (
+              <span style={{ fontSize: 11, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace" }}>Feedback already left</span>
+            ) : (
+              <button onClick={handleLeaveFeedback} style={{ background: '#4dffb8', color: '#06120c', border: 'none', padding: '9px 18px', borderRadius: 100, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                Leave feedback
+              </button>
+            )}
+          </div>
+        )}
+
+        {modalOpen && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10, padding: 16 }}>
+            <div style={{ background: '#0a1210', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: 24, width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 16, color: '#eafff5', fontWeight: 700, margin: 0 }}>Submit deliverable</h2>
+                {/* Disabled mid-flight: closing here would detach the tx watcher before the
+                    on-chain result is known, leaving the UI unable to reflect a broadcast tx. */}
+                {(txState === 'approve' || txState === 'confirming') ? (
+                  <span style={{ color: '#3a4a44', fontSize: 16, lineHeight: 1 }}>✕</span>
+                ) : (
+                  <span onClick={resetSubmitModal} style={{ color: '#6a8f80', fontSize: 16, cursor: 'pointer', lineHeight: 1 }}>✕</span>
+                )}
+              </div>
+
+              {txState === 'idle' && (
+                <>
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 6 }}>Repo URL</div>
+                    <input
+                      value={repoUrl}
+                      onChange={(e) => handleRepoUrlChange(e.target.value)}
+                      disabled={verifying}
+                      placeholder="https://github.com/owner/repo"
+                      style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '10px 12px', color: '#eafff5', fontFamily: "'JetBrains Mono', monospace", fontSize: 12, outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 6 }}>Commit SHA</div>
+                    <input
+                      value={commitHash}
+                      onChange={(e) => handleCommitHashChange(e.target.value)}
+                      disabled={verifying}
+                      placeholder="a1b2c3d..."
+                      style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '10px 12px', color: '#eafff5', fontFamily: "'JetBrains Mono', monospace", fontSize: 12, outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleVerifyCommit}
+                    disabled={verifying || !repoUrl || !commitHash}
+                    style={{
+                      width: '100%', border: 'none', padding: '10px 16px', borderRadius: 100, fontWeight: 700, fontSize: 12, marginBottom: 16,
+                      background: verifying || !repoUrl || !commitHash ? 'rgba(255,255,255,0.06)' : '#4d9fff',
+                      color: verifying || !repoUrl || !commitHash ? '#4a5550' : '#03101f',
+                      cursor: verifying || !repoUrl || !commitHash ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {verifying ? 'Verifying...' : 'Verify commit'}
+                  </button>
+
+                  {verifyResult && verifyResult.verified && (
+                    <div style={{ background: 'rgba(77,255,184,0.06)', border: '1px solid rgba(77,255,184,0.25)', borderRadius: 12, padding: 14, marginBottom: 16 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                        <span style={{ color: '#4dffb8', fontSize: 14 }}>✓</span>
+                        <span style={{ fontSize: 12, color: '#eafff5', fontWeight: 500 }}>Commit verified</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 10 }}>
+                        {verifyResult.fileCount} files · last commit {verifyResult.lastCommitDate ? new Date(verifyResult.lastCommitDate).toLocaleString() : 'unknown'}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {(verifyResult.files ?? []).map((f) => (
+                          <span key={f} style={{ fontSize: 10, color: '#a8d4c0', fontFamily: "'JetBrains Mono', monospace" }}>{f}</span>
+                        ))}
+                        {(verifyResult.fileCount ?? 0) > (verifyResult.files?.length ?? 0) && (
+                          <span style={{ fontSize: 10, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace" }}>
+                            +{(verifyResult.fileCount ?? 0) - (verifyResult.files?.length ?? 0)} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {verifyResult && !verifyResult.verified && (
+                    <div style={{ background: 'rgba(255,180,77,0.08)', border: '1px solid rgba(255,180,77,0.3)', borderRadius: 12, padding: 14, marginBottom: 16 }}>
+                      <div style={{ fontSize: 12, color: '#ffb44d', marginBottom: 8 }}>{verifyResult.error}</div>
+                      <span
+                        onClick={() => setVerifyResult(null)}
+                        style={{ fontSize: 11, color: '#4d9fff', cursor: 'pointer', textDecoration: 'underline' }}
+                      >
+                        Try again
+                      </span>
+                    </div>
+                  )}
+
+                  {isPastDeadline && (
+                    <div style={{ fontSize: 11, color: '#ffb44d', marginBottom: 12 }}>
+                      This escrow&apos;s deadline has passed — the contract no longer accepts a deliverable submission.
+                    </div>
+                  )}
+
+                  {submitWriteError && (
+                    <div style={{ fontSize: 11, color: '#ff9a9a', marginBottom: 12 }}>
+                      {submitWriteError.message.includes('User rejected') ? 'Transaction rejected in wallet' : 'Transaction failed, try again'}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={handleSubmitDeliverable}
+                    disabled={!canSubmitDeliverable}
+                    style={{
+                      width: '100%', border: 'none', padding: '11px 16px', borderRadius: 100, fontWeight: 700, fontSize: 13,
+                      background: canSubmitDeliverable ? '#4dffb8' : 'rgba(255,255,255,0.06)',
+                      color: canSubmitDeliverable ? '#06120c' : '#4a5550',
+                      cursor: canSubmitDeliverable ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    {isPastDeadline ? 'Deadline passed' : canSubmitDeliverable ? 'Submit deliverable' : 'Verify before submitting'}
+                  </button>
+                </>
+              )}
+
+              {txState !== 'idle' && (
+                <TxLifecycleStatus
+                  txState={txState}
+                  txHash={submitTxHash}
+                  explorerBase={EXPLORER_BASE}
+                  confirmedLabel="Deliverable submitted"
+                  revertedLabel="The deliverable was not recorded."
+                  onClose={resetSubmitModal}
+                />
+              )}
+            </div>
+          </div>
+        )}
+
+        {challengeModalOpen && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
+            <div style={{ background: '#0a0f0d', border: '1px solid rgba(255,180,77,0.25)', borderRadius: 16, padding: 24, width: 340, maxWidth: '90%' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 16, color: '#eafff5', margin: 0 }}>Raise challenge</h2>
+                {/* Disabled mid-flight: closing here would detach the tx watcher (and, while
+                    saving, abandon the Supabase write) before the outcome is known. */}
+                {(challengeSaving || challengeTxState === 'approve' || challengeTxState === 'confirming') ? (
+                  <span style={{ color: '#3a4a44', fontSize: 18, lineHeight: 1 }}>✕</span>
+                ) : (
+                  <span onClick={resetChallengeModal} style={{ color: '#6a8f80', cursor: 'pointer', fontSize: 18 }}>✕</span>
+                )}
+              </div>
+
+              {challengeTxState === 'idle' && !challengeSaving && (
+                <>
+                  <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 14, lineHeight: 1.5 }}>
+                    This escalates escrow #{rawId} to the Senior Arbiter for a final, binding verdict. One-time only.
+                  </div>
+                  <label style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", display: 'block', marginBottom: 6 }}>Reason for challenge</label>
+                  <textarea
+                    value={challengeReason}
+                    onChange={(e) => setChallengeReason(e.target.value.slice(0, 500))}
+                    maxLength={500}
+                    placeholder="Explain why the tentative outcome is incorrect..."
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '10px 12px', color: '#eafff5', fontFamily: "'Sora', sans-serif", fontSize: 12, outline: 'none', minHeight: 90, resize: 'none', boxSizing: 'border-box', marginBottom: 6 }}
+                  />
+                  <div style={{ textAlign: 'right', fontSize: 10, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", marginBottom: 14 }}>
+                    {challengeReason.length}/500
+                  </div>
+                  {challengeSubmitError && (
+                    <div style={{ fontSize: 11, color: '#ff9a9a', marginBottom: 12 }}>{challengeSubmitError}</div>
+                  )}
+                  {challengeWriteError && (
+                    <div style={{ fontSize: 11, color: '#ff9a9a', marginBottom: 12 }}>
+                      {challengeWriteError.message.includes('User rejected') ? 'Transaction rejected in wallet' : 'Transaction failed, try again'}
+                    </div>
+                  )}
+                  <button
+                    disabled={challengeReason.trim().length === 0}
+                    onClick={handleSubmitChallenge}
+                    style={{ width: '100%', background: 'transparent', color: challengeReason.trim().length === 0 ? '#5a4a3a' : '#ffb44d', border: `1px solid ${challengeReason.trim().length === 0 ? 'rgba(255,180,77,0.15)' : 'rgba(255,180,77,0.4)'}`, padding: 11, borderRadius: 100, fontWeight: 700, fontSize: 13, cursor: challengeReason.trim().length === 0 ? 'not-allowed' : 'pointer' }}
+                  >
+                    Submit challenge
+                  </button>
+                </>
+              )}
+
+              {challengeSaving && (
+                <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                  <div style={{ width: 28, height: 28, border: '3px solid rgba(255,180,77,0.25)', borderTopColor: '#ffb44d', borderRadius: '50%', margin: '0 auto 12px', animation: 'spin 0.8s linear infinite' }} />
+                  <div style={{ fontSize: 13, color: '#eafff5' }}>Saving challenge document</div>
+                  <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                </div>
+              )}
+
+              {!challengeSaving && challengeTxState !== 'idle' && (
+                <TxLifecycleStatus
+                  txState={challengeTxState}
+                  txHash={challengeTxHash}
+                  explorerBase={EXPLORER_BASE}
+                  confirmedLabel="Challenge submitted"
+                  revertedLabel="The challenge was not recorded."
+                  onClose={resetChallengeModal}
+                />
+              )}
+            </div>
+          </div>
+        )}
+
+        {feedbackModalOpen && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
+            <div style={{ background: '#0a0f0d', border: '1px solid rgba(77,255,184,0.25)', borderRadius: 16, padding: 24, width: 340, maxWidth: '90%' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 16, color: '#eafff5', margin: 0 }}>Leave feedback</h2>
+                {(feedbackSaving || feedbackTxState === 'approve' || feedbackTxState === 'confirming') ? (
+                  <span style={{ color: '#3a4a44', fontSize: 18, lineHeight: 1 }}>✕</span>
+                ) : (
+                  <span onClick={resetFeedbackModal} style={{ color: '#6a8f80', cursor: 'pointer', fontSize: 18 }}>✕</span>
+                )}
+              </div>
+
+              {feedbackTxState === 'idle' && !feedbackSaving && (
+                <>
+                  <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 14 }}>
+                    For {isClient ? 'worker' : 'client'} {truncate(isClient ? escrowData.worker : escrowData.client)} · escrow #{rawId}
+                  </div>
+                  <label style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", display: 'block', marginBottom: 8 }}>Rating</label>
+                  <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <span key={n} onClick={() => setFeedbackRating(n)} style={{ fontSize: 22, color: n <= feedbackRating ? '#4dffb8' : '#3a4a44', cursor: 'pointer' }}>★</span>
+                    ))}
+                  </div>
+                  <label style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", display: 'block', marginBottom: 6 }}>Message</label>
+                  <textarea
+                    value={feedbackText}
+                    onChange={(e) => setFeedbackText(e.target.value.slice(0, 500))}
+                    maxLength={500}
+                    placeholder="Share your experience working together..."
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '10px 12px', color: '#eafff5', fontFamily: "'Sora', sans-serif", fontSize: 12, outline: 'none', minHeight: 80, resize: 'none', boxSizing: 'border-box', marginBottom: 6 }}
+                  />
+                  <div style={{ textAlign: 'right', fontSize: 10, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", marginBottom: 14 }}>
+                    {feedbackText.length}/500
+                  </div>
+                  {feedbackSubmitError && (
+                    <div style={{ fontSize: 11, color: '#ff9a9a', marginBottom: 12 }}>{feedbackSubmitError}</div>
+                  )}
+                  {feedbackWriteError && (
+                    <div style={{ fontSize: 11, color: '#ff9a9a', marginBottom: 12 }}>
+                      {feedbackWriteError.message.includes('User rejected') ? 'Transaction rejected in wallet' : 'Transaction failed, try again'}
+                    </div>
+                  )}
+                  <button
+                    disabled={feedbackRating === 0}
+                    onClick={handleSubmitFeedback}
+                    style={{ width: '100%', background: feedbackRating === 0 ? 'rgba(255,255,255,0.04)' : '#4dffb8', color: feedbackRating === 0 ? '#4a5550' : '#06120c', border: 'none', padding: 11, borderRadius: 100, fontWeight: 700, fontSize: 13, cursor: feedbackRating === 0 ? 'not-allowed' : 'pointer' }}
+                  >
+                    Submit feedback
+                  </button>
+                </>
+              )}
+
+              {feedbackSaving && (
+                <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                  <div style={{ width: 28, height: 28, border: '3px solid rgba(77,255,184,0.25)', borderTopColor: '#4dffb8', borderRadius: '50%', margin: '0 auto 12px', animation: 'spin 0.8s linear infinite' }} />
+                  <div style={{ fontSize: 13, color: '#eafff5' }}>Saving feedback message</div>
+                  <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                </div>
+              )}
+
+              {!feedbackSaving && feedbackTxState !== 'idle' && (
+                <TxLifecycleStatus
+                  txState={feedbackTxState}
+                  txHash={feedbackTxHash}
+                  explorerBase={EXPLORER_BASE}
+                  confirmedLabel="Feedback submitted"
+                  revertedLabel="The feedback was not recorded."
+                  onClose={resetFeedbackModal}
+                />
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

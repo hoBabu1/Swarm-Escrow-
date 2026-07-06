@@ -11,6 +11,17 @@ const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 // ============================================================================
 export const AGENT_MODEL = "claude-haiku-4-5-20251001";
 
+if (AGENT_MODEL !== "claude-sonnet-5") {
+  console.warn(
+    "\n" +
+      "==================================================================\n" +
+      `  AGENT_MODEL is "${AGENT_MODEL}" (Haiku, dev/testing only).\n` +
+      "  This MUST be swapped to \"claude-sonnet-5\" in oracle/src/agents/base.ts\n" +
+      "  before the final demo recording.\n" +
+      "==================================================================\n",
+  );
+}
+
 const MAX_TOKENS = 1024;
 
 const VERDICT_TOOL: Anthropic.Tool = {

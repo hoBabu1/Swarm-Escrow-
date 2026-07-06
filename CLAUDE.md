@@ -2,6 +2,8 @@
 
 Guidance for Claude Code when working in this repo. Read this fully before making changes.
 
+**Reviewer subagent discoverability:** Reviewer subagents live under `frontend/.claude/agents/`, which this harness does not scan for invocable subagent types (only root `.claude/agents/` is discovered). Never substitute self-review when a named reviewer can't be found — instead spawn a `general-purpose` agent per reviewer, instruct it to read that reviewer's `.md` file in full and adopt it verbatim as its persona, and treat its verdict as the actual independent review. Follow each persona's own restart rule after every fix.
+
 ## Project Overview
 
 **Swarm Escrow** — a freelance/marketplace escrow smart contract for the **BOT Chain Builder Challenge #1** hackathon (AI Agent track, primary).
