@@ -3,6 +3,9 @@ import { createPublicClient, http, keccak256, toBytes } from 'viem';
 import { botChainTestnet } from '@/lib/chains';
 import { swarmEscrowConfig } from '@/lib/contract';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { createIpRateLimiter } from '@/lib/rateLimit';
+import { verifyMinedTxOnContract } from '@/lib/verifyOnChainTx';
+import { EscrowStructTuple, parseEscrowTuple } from '@/lib/hooks/useEscrow';
 
 const publicClient = createPublicClient({
   chain: botChainTestnet,
@@ -12,17 +15,7 @@ const publicClient = createPublicClient({
 // Very small in-memory per-IP limiter — this is a single Next.js server process for a
 // hackathon deployment, not a multi-instance one, so this is sufficient to blunt spam
 // without pulling in an external store.
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX_REQUESTS = 10;
-const requestLog = new Map<string, number[]>();
-
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const timestamps = (requestLog.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  timestamps.push(now);
-  requestLog.set(ip, timestamps);
-  return timestamps.length >= RATE_LIMIT_MAX_REQUESTS;
-}
+const isRateLimited = createIpRateLimiter(60_000, 10);
 
 export async function POST(req: NextRequest) {
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
@@ -30,14 +23,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Too many requests, try again shortly' }, { status: 429 });
   }
 
-  let body: { escrowId?: number | string; specText?: string; specHash?: string };
+  let body: { escrowId?: number | string; specText?: string; specHash?: string; txHash?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { escrowId, specText, specHash } = body;
+  const { escrowId, specText, specHash, txHash } = body;
 
   if (escrowId === undefined || Number.isNaN(Number(escrowId))) {
     return NextResponse.json({ error: 'escrowId is required' }, { status: 400 });
@@ -59,12 +52,12 @@ export async function POST(req: NextRequest) {
   // that isn't theirs, or for an ID that doesn't exist yet.
   let onChainSpecHash: string;
   try {
-    const escrow = await publicClient.readContract({
+    const data = await publicClient.readContract({
       ...swarmEscrowConfig,
       functionName: 'escrows',
       args: [BigInt(escrowId)],
     });
-    onChainSpecHash = escrow[3];
+    onChainSpecHash = parseEscrowTuple(data as unknown as EscrowStructTuple).specHash;
   } catch {
     return NextResponse.json({ error: "Couldn't verify escrow on-chain, try again" }, { status: 502 });
   }
@@ -73,9 +66,43 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'specHash does not match the on-chain escrow' }, { status: 400 });
   }
 
-  const { error } = await getSupabaseAdmin()
+  // txHash is optional here (unlike challenge-docs/feedback-messages' PATCH routes) — if the
+  // caller supplies one, we only attach it once it checks out, same anti-fabrication standard
+  // as every other on-chain-linked value this route already verifies above. But a failed check
+  // (e.g. the RPC node the server hits hasn't caught up yet with a tx that just confirmed
+  // client-side) must not block saving the spec text itself — that's already independently
+  // verified via the hash match and on-chain specHash cross-check above. So we just drop the
+  // tx_hash link rather than rejecting the whole save.
+  let verifiedTxHash: string | null = null;
+  if (txHash !== undefined) {
+    const verification = await verifyMinedTxOnContract(publicClient, txHash, swarmEscrowConfig.address);
+    if (verification.ok) {
+      verifiedTxHash = txHash as string;
+    }
+  }
+
+  let { error } = await getSupabaseAdmin()
     .from('escrow_specs')
-    .upsert({ escrow_id: Number(escrowId), spec_text: specText, spec_hash: specHash }, { onConflict: 'escrow_id' });
+    .upsert(
+      { escrow_id: Number(escrowId), spec_text: specText, spec_hash: specHash, tx_hash: verifiedTxHash },
+      { onConflict: 'escrow_id' }
+    );
+
+  // Same fallback intent as selectWithTxHashFallback on the read side — if the tx_hash
+  // migration hasn't been applied to this project yet, still store the spec text itself rather
+  // than losing it entirely just because the link-to-tx column is missing. Note the code differs
+  // from the read path: a raw SQL select against a missing column returns Postgres's own 42703,
+  // but an insert/upsert with an unrecognized JSON key is rejected by PostgREST's schema-cache
+  // validation instead, which reports PGRST204 ("Could not find the column ... in the schema
+  // cache") — confirmed by reproducing the exact error directly against the live table.
+  if (error?.code === '42703' || error?.code === 'PGRST204') {
+    ({ error } = await getSupabaseAdmin()
+      .from('escrow_specs')
+      .upsert(
+        { escrow_id: Number(escrowId), spec_text: specText, spec_hash: specHash },
+        { onConflict: 'escrow_id' }
+      ));
+  }
 
   if (error) {
     return NextResponse.json({ error: 'Failed to store spec text' }, { status: 500 });

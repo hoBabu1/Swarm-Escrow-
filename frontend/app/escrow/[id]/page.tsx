@@ -11,11 +11,14 @@ import { useAgentVerdicts, AgentRoleName } from '@/lib/hooks/useAgentVerdicts';
 import { useHashVerifiedText } from '@/lib/hooks/useHashVerifiedText';
 import { useTxLifecycle } from '@/lib/hooks/useTxLifecycle';
 import { STATUS_LABELS, truncate, sameAddress, isLikelyAlreadyHandledError } from '@/lib/escrowFormat';
-import { computeStepInfo, STEP_LABELS } from '@/lib/stepTracker';
+import { computeStepInfo, STEP_LABELS, STEP_COLORS } from '@/lib/stepTracker';
 import { TxLifecycleStatus } from '@/components/TxLifecycleStatus';
+import { ViewOnChainLink } from '@/components/ViewOnChainLink';
 import { WalletButton } from '@/components/WalletButton';
 import { AdminNavLink } from '@/components/AdminNavLink';
+import { Markdown } from '@/components/Markdown';
 import { supabase } from '@/lib/supabase';
+import { selectWithTxHashFallback } from '@/lib/selectWithTxHashFallback';
 
 const RATING_PREFIX = /^(\d)\/5\s*(?:—|-)?\s*/;
 
@@ -56,25 +59,27 @@ function StepTracker({ status }: { status: EscrowStatus }) {
       {STEP_LABELS.map((stepLabel, i) => {
         const done = i < currentIndex || isTerminal;
         const current = i === currentIndex && !isTerminal;
+        const reached = done || current;
+        const phaseColor = STEP_COLORS[i];
         const label = i === 2 && labelOverride ? labelOverride : stepLabel;
         return (
           <div key={stepLabel} style={{ display: 'flex', alignItems: 'center', flex: i < STEP_LABELS.length - 1 ? 1 : 'unset' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <div style={{
                 width: 22, height: 22, borderRadius: '50%',
-                background: done ? '#4dffb8' : current ? '#4d9fff' : 'rgba(255,255,255,0.08)',
+                background: reached ? phaseColor : 'rgba(255,255,255,0.08)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: done ? '#06120c' : current ? '#03101f' : '#6a8f80',
+                color: reached ? '#06120c' : '#6a8f80',
                 fontSize: 10, fontWeight: 700,
               }}>
                 {done ? '✓' : i + 1}
               </div>
-              <span style={{ fontSize: 9, color: done ? '#4dffb8' : current ? '#4d9fff' : '#6a8f80', marginTop: 6, fontFamily: "'JetBrains Mono', monospace", textAlign: 'center', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 9, color: reached ? phaseColor : '#6a8f80', marginTop: 6, fontFamily: "'JetBrains Mono', monospace", textAlign: 'center', whiteSpace: 'nowrap' }}>
                 {label}
               </span>
             </div>
             {i < STEP_LABELS.length - 1 && (
-              <div style={{ flex: 1, height: 2, background: i < currentIndex ? '#4dffb8' : 'rgba(255,255,255,0.1)', marginBottom: 16, minWidth: 20 }} />
+              <div style={{ flex: 1, height: 2, background: i < currentIndex ? phaseColor : 'rgba(255,255,255,0.1)', marginBottom: 16, minWidth: 20 }} />
             )}
           </div>
         );
@@ -86,10 +91,82 @@ function StepTracker({ status }: { status: EscrowStatus }) {
 const VERDICT_REASONING_LIMIT = 100;
 const SPEC_LIMIT = 180;
 
+function fetchFeedbackMessage(escrowId: bigint, senderAddress: string) {
+  return selectWithTxHashFallback('feedback_messages', { escrow_id: Number(escrowId), sender_address: senderAddress }, 'message_text');
+}
+
 function HashMismatchWarning() {
   return (
     <div style={{ background: 'rgba(255,90,90,0.1)', border: '1px solid rgba(255,90,90,0.35)', borderRadius: 8, padding: '8px 10px', fontSize: 10, color: '#ff9a9a', marginBottom: 10 }}>
       ⚠ This text doesn&apos;t match the on-chain hash — it may have been tampered with or corrupted off-chain. Do not trust this content.
+    </div>
+  );
+}
+
+function ReviewingIndicator() {
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 5, marginBottom: 8 }}>
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: '50%',
+              background: i % 2 === 0 ? '#4dffb8' : '#4d9fff',
+              display: 'inline-block',
+              animation: `swarmPulse 1.2s ease-in-out ${i * 0.15}s infinite`,
+            }}
+          />
+        ))}
+      </div>
+      <p style={{ fontSize: 11, color: '#6a8f80', margin: 0 }}>Reviewing...</p>
+      <style>{`@keyframes swarmPulse { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.7); } 40% { opacity: 1; transform: scale(1.15); } }`}</style>
+    </div>
+  );
+}
+
+function FeedbackPanel({
+  title,
+  hasSubmitted,
+  feedback,
+  explorerBase,
+}: {
+  title: string;
+  hasSubmitted: boolean;
+  feedback: { text: string; txHash: string | null; loading: boolean; error: string | null };
+  explorerBase: string;
+}) {
+  return (
+    <div style={{ background: 'rgba(6,10,12,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16, flex: 1, minWidth: 0 }}>
+      <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 8, textTransform: 'uppercase' }}>
+        {title}
+      </div>
+      {!hasSubmitted ? (
+        <p style={{ fontSize: 12, color: '#6a8f80', margin: 0 }}>Not yet submitted</p>
+      ) : feedback.loading ? (
+        <p style={{ fontSize: 12, color: '#6a8f80', margin: 0 }}>Loading feedback...</p>
+      ) : feedback.error ? (
+        <p style={{ fontSize: 12, color: '#ff9a9a', margin: 0 }}>{feedback.error}</p>
+      ) : (() => {
+        const match = RATING_PREFIX.exec(feedback.text);
+        const rating = match ? Number(match[1]) : null;
+        const message = match ? feedback.text.slice(match[0].length) : feedback.text;
+        return (
+          <>
+            {rating !== null && (
+              <div style={{ marginBottom: 8 }}>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <span key={n} style={{ fontSize: 16, color: n <= rating ? '#4dffb8' : '#3a4a44' }}>★</span>
+                ))}
+              </div>
+            )}
+            <Markdown text={message || 'No message left'} color="#c4dcd0" fontSize={12} lineHeight={1.5} />
+            <ViewOnChainLink txHash={feedback.txHash} explorerBase={explorerBase} />
+          </>
+        );
+      })()}
     </div>
   );
 }
@@ -102,38 +179,57 @@ function VerdictCard({
   loading,
   fetchError,
   matchesHash,
-  expanded,
-  onToggle,
+  txHash,
+  explorerBase,
+  onShowMore,
+  notNeededReason,
+  finalBindingLabel,
 }: {
-  agent: AgentRoleName;
+  agent: AgentRoleName | 'Senior Arbiter';
   hasVoted: boolean;
   approved: boolean;
   reasoning: string | undefined;
   loading: boolean;
   fetchError: string | null;
   matchesHash: boolean | undefined;
-  expanded: boolean;
-  onToggle: () => void;
+  txHash: string | null | undefined;
+  explorerBase: string;
+  onShowMore: () => void;
+  notNeededReason?: string;
+  finalBindingLabel?: boolean;
 }) {
   if (!hasVoted) {
+    if (notNeededReason) {
+      return (
+        <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16 }}>
+          <div style={{ fontSize: 12, color: '#eafff5', fontWeight: 500, marginBottom: 10 }}>{agent}</div>
+          <p style={{ fontSize: 11, color: '#6a8f80', margin: 0 }}>{notNeededReason}</p>
+        </div>
+      );
+    }
     return (
       <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16 }}>
         <div style={{ fontSize: 12, color: '#eafff5', fontWeight: 500, marginBottom: 10 }}>{agent}</div>
-        <p style={{ fontSize: 11, color: '#6a8f80', margin: 0 }}>Awaiting vote</p>
+        <ReviewingIndicator />
       </div>
     );
   }
 
   const text = reasoning ?? '';
   const isLong = text.length > VERDICT_REASONING_LIMIT;
-  const displayText = isLong && !expanded ? `${text.slice(0, VERDICT_REASONING_LIMIT)}...` : text;
+  const displayText = isLong ? `${text.slice(0, VERDICT_REASONING_LIMIT)}...` : text;
 
   return (
     <div style={{ background: 'rgba(6,10,12,0.5)', border: `1px solid ${approved ? 'rgba(77,255,184,0.25)' : 'rgba(255,180,77,0.25)'}`, borderRadius: 12, padding: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: finalBindingLabel ? 2 : 10 }}>
         <span style={{ fontSize: 12, color: '#eafff5', fontWeight: 500 }}>{agent}</span>
         <span style={{ color: approved ? '#4dffb8' : '#ffb44d', fontSize: 14 }}>{approved ? '✓' : '✕'}</span>
       </div>
+      {finalBindingLabel && (
+        <div style={{ fontSize: 10, color: 'rgba(255,180,77,0.85)', fontFamily: "'JetBrains Mono', monospace", marginBottom: 10, textTransform: 'uppercase' }}>
+          Final binding verdict
+        </div>
+      )}
       {loading ? (
         <p style={{ fontSize: 11, color: '#6a8f80', margin: 0 }}>Loading reasoning...</p>
       ) : fetchError ? (
@@ -142,17 +238,18 @@ function VerdictCard({
         <HashMismatchWarning />
       ) : (
         <>
-          <p style={{ fontSize: 11, color: '#a8d4c0', margin: '0 0 10px', lineHeight: 1.5 }}>{displayText || 'Reasoning text unavailable'}</p>
+          <Markdown text={displayText || 'Reasoning text unavailable'} color="#a8d4c0" fontSize={11} lineHeight={1.5} />
           {isLong && (
             <span
-              onClick={onToggle}
+              onClick={onShowMore}
               onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
               onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
               style={{ display: 'block', color: '#4d9fff', fontSize: 11, cursor: 'pointer', textDecoration: 'none' }}
             >
-              {expanded ? 'Show less' : 'Show more'}
+              Show more
             </span>
           )}
+          <ViewOnChainLink txHash={txHash} explorerBase={explorerBase} />
         </>
       )}
     </div>
@@ -165,7 +262,7 @@ export default function EscrowDetailPage() {
   const { address } = useAccount();
   const [now, setNow] = useState(Date.now());
   const [specExpanded, setSpecExpanded] = useState(false);
-  const [expandedVerdicts, setExpandedVerdicts] = useState<Record<string, boolean>>({});
+  const [expandedReasoning, setExpandedReasoning] = useState<{ agent: string; text: string } | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [repoUrl, setRepoUrl] = useState('');
@@ -185,7 +282,8 @@ export default function EscrowDetailPage() {
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [feedbackSubmitError, setFeedbackSubmitError] = useState<string | null>(null);
 
-  const [ownFeedback, setOwnFeedback] = useState<{ text: string; loading: boolean; error: string | null }>({ text: '', loading: false, error: null });
+  const [clientToWorkerFeedback, setClientToWorkerFeedback] = useState<{ text: string; txHash: string | null; loading: boolean; error: string | null }>({ text: '', txHash: null, loading: false, error: null });
+  const [workerToClientFeedback, setWorkerToClientFeedback] = useState<{ text: string; txHash: string | null; loading: boolean; error: string | null }>({ text: '', txHash: null, loading: false, error: null });
 
   const rawId = Array.isArray(params.id) ? params.id[0] : params.id;
   const isValidId = rawId !== undefined && /^\d+$/.test(rawId);
@@ -207,21 +305,39 @@ export default function EscrowDetailPage() {
   const { writeContract: writeChallenge, data: challengeTxHash, isPending: isChallengeApproving, error: challengeWriteError, reset: resetChallengeWrite } = useWriteContract();
   const { txState: challengeTxState, isConfirmed: isChallengeConfirmed } = useTxLifecycle(challengeTxHash, isChallengeApproving);
 
+  const challengeTxHashSaved = useRef(false);
   useEffect(() => {
     if (isChallengeConfirmed) {
       refetch();
       refetchVerdicts();
+      if (!challengeTxHashSaved.current && escrowId !== undefined && challengeTxHash) {
+        challengeTxHashSaved.current = true;
+        fetch('/api/challenge-docs', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ escrowId: escrowId.toString(), txHash: challengeTxHash }),
+        }).catch(() => {});
+      }
     }
-  }, [isChallengeConfirmed, refetch, refetchVerdicts]);
+  }, [isChallengeConfirmed, refetch, refetchVerdicts, escrowId, challengeTxHash]);
 
   const { writeContract: writeFeedback, data: feedbackTxHash, isPending: isFeedbackApproving, error: feedbackWriteError, reset: resetFeedbackWrite } = useWriteContract();
   const { txState: feedbackTxState, isConfirmed: isFeedbackConfirmed } = useTxLifecycle(feedbackTxHash, isFeedbackApproving);
 
+  const feedbackTxHashSaved = useRef(false);
   useEffect(() => {
     if (isFeedbackConfirmed) {
       refetch();
+      if (!feedbackTxHashSaved.current && escrowId !== undefined && feedbackTxHash && address) {
+        feedbackTxHashSaved.current = true;
+        fetch('/api/feedback-messages', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ escrowId: escrowId.toString(), senderAddress: address, txHash: feedbackTxHash }),
+        }).catch(() => {});
+      }
     }
-  }, [isFeedbackConfirmed, refetch]);
+  }, [isFeedbackConfirmed, refetch, escrowId, feedbackTxHash, address]);
 
   const { writeContract: writeFinalize, data: finalizeTxHash, isPending: isFinalizeApproving, error: finalizeWriteError, reset: resetFinalizeWrite } = useWriteContract();
   const { txState: finalizeTxState, isConfirmed: isFinalizeConfirmed } = useTxLifecycle(finalizeTxHash, isFinalizeApproving);
@@ -233,6 +349,26 @@ export default function EscrowDetailPage() {
       refetch();
     }
   }, [isFinalizeConfirmed, refetch]);
+
+  // reclaimAfterDeadline is client-only (unlike finalize/resolve) — only escrow.client can
+  // call it, so the panel that triggers this is only ever rendered for that wallet.
+  const { writeContract: writeReclaim, data: reclaimTxHash, isPending: isReclaimApproving, error: reclaimWriteError, reset: resetReclaimWrite } = useWriteContract();
+  const { txState: reclaimTxState, isConfirmed: isReclaimConfirmed } = useTxLifecycle(reclaimTxHash, isReclaimApproving);
+  const [reclaimRaceMessage, setReclaimRaceMessage] = useState<string | null>(null);
+  const [isReclaimSubmitting, setIsReclaimSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (isReclaimConfirmed) {
+      refetch();
+    }
+  }, [isReclaimConfirmed, refetch]);
+
+  useEffect(() => {
+    if (isLikelyAlreadyHandledError(reclaimWriteError)) {
+      setReclaimRaceMessage('Already handled — refreshing latest status');
+      refetch();
+    }
+  }, [reclaimWriteError, refetch]);
 
   // resolve() is a public function — the oracle calls it automatically moments after the
   // final agent vote lands, but any wallet can trigger it too (e.g. if the oracle is down).
@@ -281,40 +417,69 @@ export default function EscrowDetailPage() {
     return () => clearInterval(t);
   }, [isCountingDown]);
 
-  const isTerminalStatus = escrow?.status === EscrowStatus.Resolved || escrow?.status === EscrowStatus.Refunded;
-  const isClientAddr = sameAddress(address, escrow?.client);
-  const isWorkerAddr = sameAddress(address, escrow?.worker);
-  const hasLeftOwnFeedback =
-    (isClientAddr && !!escrow?.hasClientFeedback) || (isWorkerAddr && !!escrow?.hasWorkerFeedback);
-
   useEffect(() => {
-    if (!isTerminalStatus || !hasLeftOwnFeedback || !address || escrowId === undefined) return;
+    if (!expandedReasoning) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setExpandedReasoning(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [expandedReasoning]);
+
+  const isTerminalStatus = escrow?.status === EscrowStatus.Resolved || escrow?.status === EscrowStatus.Refunded;
+
+  // These two panels are labeled by fixed direction ("Client -> Worker" / "Worker -> Client"),
+  // not by the connected wallet's role, so they're fetched by the escrow's actual client/worker
+  // addresses rather than by `address`/counterparty — the same two panels render identically
+  // no matter who's viewing.
+  useEffect(() => {
+    if (!isTerminalStatus || !escrow?.hasClientFeedback || !escrow?.client || escrowId === undefined) return;
     let cancelled = false;
-    setOwnFeedback({ text: '', loading: true, error: null });
+    setClientToWorkerFeedback({ text: '', txHash: null, loading: true, error: null });
     (async () => {
-      const { data, error } = await supabase
-        .from('feedback_messages')
-        .select('message_text')
-        .eq('escrow_id', Number(escrowId))
-        .eq('sender_address', address)
-        .maybeSingle();
+      const { data, error } = await fetchFeedbackMessage(escrowId, escrow.client);
       if (cancelled) return;
       if (error) {
-        setOwnFeedback({ text: '', loading: false, error: "Couldn't load your feedback" });
+        setClientToWorkerFeedback({ text: '', txHash: null, loading: false, error: "Couldn't load this feedback" });
         return;
       }
-      setOwnFeedback({ text: (data?.message_text as string) ?? '', loading: false, error: null });
+      setClientToWorkerFeedback({ text: (data?.message_text as string) ?? '', txHash: (data?.tx_hash as string) ?? null, loading: false, error: null });
     })();
     return () => {
       cancelled = true;
     };
-  }, [isTerminalStatus, hasLeftOwnFeedback, address, escrowId]);
+  }, [isTerminalStatus, escrow?.hasClientFeedback, escrow?.client, escrowId]);
+
+  useEffect(() => {
+    if (!isTerminalStatus || !escrow?.hasWorkerFeedback || !escrow?.worker || escrowId === undefined) return;
+    let cancelled = false;
+    setWorkerToClientFeedback({ text: '', txHash: null, loading: true, error: null });
+    (async () => {
+      const { data, error } = await fetchFeedbackMessage(escrowId, escrow.worker);
+      if (cancelled) return;
+      if (error) {
+        setWorkerToClientFeedback({ text: '', txHash: null, loading: false, error: "Couldn't load this feedback" });
+        return;
+      }
+      setWorkerToClientFeedback({ text: (data?.message_text as string) ?? '', txHash: (data?.tx_hash as string) ?? null, loading: false, error: null });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isTerminalStatus, escrow?.hasWorkerFeedback, escrow?.worker, escrowId]);
 
   const specText = useHashVerifiedText({
     table: 'escrow_specs',
     match: escrowId !== undefined ? { escrow_id: Number(escrowId) } : {},
     textColumn: 'spec_text',
     onChainHash: escrow?.specHash,
+  });
+
+  const challengeReasonText = useHashVerifiedText({
+    table: 'challenge_docs',
+    match: escrowId !== undefined ? { escrow_id: Number(escrowId) } : {},
+    textColumn: 'document_text',
+    onChainHash: escrow?.hasChallenged ? escrow.challengeReasoningHash : undefined,
   });
 
   const reviewerText = useHashVerifiedText({
@@ -391,6 +556,12 @@ export default function EscrowDetailPage() {
   const canFinalizeAfterSeniorArbiterTimeout =
     escrowData.status === EscrowStatus.Challenged && now > Number(escrowData.seniorArbiterDeadline) * 1000;
 
+  // reclaimAfterDeadline requires status still Created or DeliverableSubmitted — but the
+  // worker can't submit past the deadline (see isPastDeadline above), so in practice only
+  // Created applies here. Client-only, unlike every other finalize/resolve path.
+  const canReclaimAfterDeadline =
+    isClient && escrowData.status === EscrowStatus.Created && now > Number(escrowData.deadline) * 1000;
+
   // resolve() has no caller restriction either — it just requires 2-of-3 agent consensus to
   // exist. The oracle normally calls it within moments of the deciding vote; this is the
   // manual fallback for anyone connected.
@@ -401,10 +572,6 @@ export default function EscrowDetailPage() {
 
   const isSpecLong = (specText.text ?? '').length > SPEC_LIMIT;
   const displaySpec = isSpecLong && !specExpanded ? `${(specText.text ?? '').slice(0, SPEC_LIMIT)}...` : specText.text;
-
-  const toggleVerdict = (agent: string) => {
-    setExpandedVerdicts((prev) => ({ ...prev, [agent]: !prev[agent] }));
-  };
 
   const canSubmitDeliverable = verifyResult !== null && verifyResult.verified === true && txState === 'idle' && !isPastDeadline;
 
@@ -610,6 +777,30 @@ export default function EscrowDetailPage() {
     }
   };
 
+  // Same race-safety pattern as handleFinalize/handleResolve above.
+  const handleReclaim = async () => {
+    if (isReclaimSubmitting || reclaimTxState !== 'idle' || escrowId === undefined) return;
+    setIsReclaimSubmitting(true);
+    setReclaimRaceMessage(null);
+
+    try {
+      const fresh = await refetch();
+      const freshEscrow = fresh.data ? parseEscrowTuple(fresh.data as EscrowStructTuple) : escrowData;
+      const stillReclaimable =
+        (freshEscrow.status === EscrowStatus.Created || freshEscrow.status === EscrowStatus.DeliverableSubmitted) &&
+        now > Number(freshEscrow.deadline) * 1000;
+
+      if (!stillReclaimable) {
+        setReclaimRaceMessage('This was already resolved — refreshing...');
+        return;
+      }
+
+      writeReclaim({ ...swarmEscrowConfig, functionName: 'reclaimAfterDeadline', args: [escrowId] });
+    } finally {
+      setIsReclaimSubmitting(false);
+    }
+  };
+
   const handleSubmitDeliverable = () => {
     if (!canSubmitDeliverable || escrowId === undefined) return;
     writeContract({
@@ -703,51 +894,97 @@ export default function EscrowDetailPage() {
                   {specExpanded ? 'Show less' : 'Show more'}
                 </span>
               )}
+              <ViewOnChainLink txHash={specText.txHash} explorerBase={EXPLORER_BASE} />
             </>
           )}
         </div>
 
-        <div style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", marginBottom: 10 }}>
-          Agent verdicts · {verdicts.filter((v) => v.hasVoted && v.approved).length} of 3 approve
-        </div>
-        {verdictsError && (
-          <div style={{ background: 'rgba(255,90,90,0.1)', border: '1px solid rgba(255,90,90,0.35)', borderRadius: 8, padding: '10px 12px', fontSize: 11, color: '#ff9a9a', marginBottom: 12 }}>
-            Couldn&apos;t read agent verdicts from the chain — the panel below may not reflect real votes yet. Try refreshing.
-          </div>
-        )}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 32 }}>
-          {verdicts.map((v, i) => (
-            <VerdictCard
-              key={v.agent}
-              agent={v.agent}
-              hasVoted={v.hasVoted}
-              approved={v.approved}
-              reasoning={verdictTexts[i].text}
-              loading={verdictsLoading || verdictTexts[i].loading}
-              fetchError={verdictTexts[i].error}
-              matchesHash={verdictTexts[i].matchesHash}
-              expanded={!!expandedVerdicts[v.agent]}
-              onToggle={() => toggleVerdict(v.agent)}
-            />
-          ))}
-        </div>
-
-        {seniorArbiterVote.hasVoted && (
-          <div style={{ background: 'rgba(255,180,77,0.08)', border: '1px solid rgba(255,180,77,0.3)', borderRadius: 12, padding: 16, marginBottom: 32 }}>
-            <div style={{ fontSize: 11, color: '#ffb44d', fontFamily: "'JetBrains Mono', monospace", marginBottom: 8, textTransform: 'uppercase' }}>
-              Senior Arbiter · Final binding verdict
-            </div>
-            {seniorArbiterText.loading ? (
-              <p style={{ fontSize: 12, color: '#6a8f80', margin: 0 }}>Loading reasoning...</p>
-            ) : seniorArbiterText.error ? (
-              <p style={{ fontSize: 12, color: '#ff9a9a', margin: 0 }}>Couldn&apos;t load reasoning text — {seniorArbiterText.error}</p>
-            ) : seniorArbiterText.matchesHash === false ? (
+        {escrowData.hasChallenged && (
+          <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(255,180,77,0.25)', borderRadius: 12, padding: 16, marginBottom: 32 }}>
+            <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 8 }}>Challenge reason</div>
+            {challengeReasonText.loading ? (
+              <p style={{ fontSize: 12, color: '#6a8f80', margin: 0 }}>Loading challenge reason...</p>
+            ) : challengeReasonText.error ? (
+              <p style={{ fontSize: 12, color: '#ff9a9a', margin: 0 }}>Couldn&apos;t load challenge reason — {challengeReasonText.error}</p>
+            ) : challengeReasonText.matchesHash === false ? (
               <HashMismatchWarning />
             ) : (
-              <p style={{ fontSize: 13, color: '#eafff5', margin: 0, lineHeight: 1.5 }}>{seniorArbiterText.text || 'Reasoning text unavailable'}</p>
+              <>
+                <Markdown text={challengeReasonText.text || 'Challenge reason unavailable'} color="#c4dcd0" fontSize={13} lineHeight={1.5} />
+                <ViewOnChainLink txHash={challengeReasonText.txHash} explorerBase={EXPLORER_BASE} />
+              </>
             )}
           </div>
         )}
+
+        {escrowData.status !== EscrowStatus.Created && (() => {
+          const arbiterNotNeeded =
+            !verdicts[2]?.hasVoted && !!verdicts[0]?.hasVoted && !!verdicts[1]?.hasVoted && verdicts[0].approved === verdicts[1].approved;
+          const showSeniorArbiterCard = escrowData.hasChallenged;
+          const cardCount = showSeniorArbiterCard ? 4 : 3;
+
+          return (
+            <>
+              <div style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", marginBottom: 10 }}>
+                {/* The 2-of-3 tally only ever covers Reviewer/FraudSanity/Arbiter — the Senior
+                    Arbiter's vote is a separate, overriding decision, not a 4th ballot in the same
+                    count, so it's called out on its own rather than folded into "X of Y approve". */}
+                Agent verdicts · {verdicts.filter((v) => v.hasVoted && v.approved).length} of {verdicts[2]?.hasVoted ? 3 : 2} approve
+                {arbiterNotNeeded && ' · Arbiter not needed (Reviewer and FraudSanity agreed)'}
+                {seniorArbiterVote.hasVoted && ` · Senior Arbiter ${seniorArbiterVote.approved ? 'approved' : 'rejected'} (binding, overrides tentative outcome)`}
+              </div>
+              {verdictsError && (
+                <div style={{ background: 'rgba(255,90,90,0.1)', border: '1px solid rgba(255,90,90,0.35)', borderRadius: 8, padding: '10px 12px', fontSize: 11, color: '#ff9a9a', marginBottom: 12 }}>
+                  Couldn&apos;t read agent verdicts from the chain — the panel below may not reflect real votes yet. Try refreshing.
+                </div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cardCount}, 1fr)`, gap: 12, marginBottom: 32 }}>
+                {verdicts.map((v, i) => (
+                  <VerdictCard
+                    key={v.agent}
+                    agent={v.agent}
+                    hasVoted={v.hasVoted}
+                    approved={v.approved}
+                    reasoning={verdictTexts[i].text}
+                    loading={verdictsLoading || verdictTexts[i].loading}
+                    fetchError={verdictTexts[i].error}
+                    matchesHash={verdictTexts[i].matchesHash}
+                    txHash={verdictTexts[i].txHash}
+                    explorerBase={EXPLORER_BASE}
+                    onShowMore={() => setExpandedReasoning({ agent: v.agent, text: verdictTexts[i].text ?? '' })}
+                    notNeededReason={
+                      i === 2 && arbiterNotNeeded
+                        ? 'Not needed — Reviewer and FraudSanity agreed'
+                        : !v.hasVoted && isTerminalStatus
+                        ? 'No verdict recorded — escrow resolved without this vote'
+                        : undefined
+                    }
+                  />
+                ))}
+                {showSeniorArbiterCard && (
+                  <VerdictCard
+                    agent="Senior Arbiter"
+                    hasVoted={seniorArbiterVote.hasVoted}
+                    approved={seniorArbiterVote.approved}
+                    reasoning={seniorArbiterText.text}
+                    loading={verdictsLoading || seniorArbiterText.loading}
+                    fetchError={seniorArbiterText.error}
+                    matchesHash={seniorArbiterText.matchesHash}
+                    txHash={seniorArbiterText.txHash}
+                    explorerBase={EXPLORER_BASE}
+                    onShowMore={() => setExpandedReasoning({ agent: 'Senior Arbiter', text: seniorArbiterText.text ?? '' })}
+                    notNeededReason={
+                      !seniorArbiterVote.hasVoted && isTerminalStatus
+                        ? 'No verdict recorded — escrow resolved without this vote'
+                        : undefined
+                    }
+                    finalBindingLabel
+                  />
+                )}
+              </div>
+            </>
+          );
+        })()}
 
         {isWorker && escrowData.status === EscrowStatus.Created && (
           <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(77,255,184,0.25)', borderRadius: 12, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
@@ -847,6 +1084,49 @@ export default function EscrowDetailPage() {
           </div>
         )}
 
+        {canReclaimAfterDeadline && (
+          <div style={{ background: 'rgba(255,180,77,0.08)', border: '1px solid rgba(255,180,77,0.3)', borderRadius: 12, padding: 16, marginBottom: 32 }}>
+            {reclaimTxState === 'idle' ? (
+              <>
+                <div style={{ fontSize: 12, color: '#eafff5', fontWeight: 500, marginBottom: 4 }}>
+                  Worker missed the deadline
+                </div>
+                <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 12 }}>
+                  The worker never submitted a deliverable before the deadline. You can reclaim your full deposit.
+                </div>
+                {reclaimRaceMessage && (
+                  <div style={{ fontSize: 11, color: '#4d9fff', marginBottom: 12 }}>{reclaimRaceMessage}</div>
+                )}
+                {reclaimWriteError && !isLikelyAlreadyHandledError(reclaimWriteError) && (
+                  <div style={{ fontSize: 11, color: '#ff9a9a', marginBottom: 12 }}>
+                    {reclaimWriteError.message.includes('User rejected') ? 'Transaction rejected in wallet' : 'Transaction failed, try again'}
+                  </div>
+                )}
+                <button
+                  onClick={handleReclaim}
+                  disabled={isReclaimSubmitting}
+                  style={{
+                    background: isReclaimSubmitting ? 'rgba(255,180,77,0.3)' : '#ffb44d',
+                    color: '#2b1a03', border: 'none', padding: '10px 20px', borderRadius: 100, fontWeight: 700, fontSize: 13,
+                    cursor: isReclaimSubmitting ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {isReclaimSubmitting ? 'Checking status...' : 'Reclaim funds'}
+                </button>
+              </>
+            ) : (
+              <TxLifecycleStatus
+                txState={reclaimTxState}
+                txHash={reclaimTxHash}
+                explorerBase={EXPLORER_BASE}
+                confirmedLabel="Funds reclaimed"
+                revertedLabel="No funds were moved."
+                onClose={() => { setReclaimRaceMessage(null); resetReclaimWrite(); }}
+              />
+            )}
+          </div>
+        )}
+
         {(escrowData.status === EscrowStatus.Resolved || escrowData.status === EscrowStatus.Refunded) && (isClient || isWorker) && (
           <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(77,255,184,0.25)', borderRadius: 12, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
             <div style={{ fontSize: 12, color: '#eafff5', fontWeight: 500 }}>Escrow {escrowData.status === EscrowStatus.Resolved ? 'resolved' : 'refunded'}</div>
@@ -858,32 +1138,10 @@ export default function EscrowDetailPage() {
           </div>
         )}
 
-        {alreadyLeftFeedback && (
-          <div style={{ background: 'rgba(6,10,12,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16, marginTop: 12 }}>
-            <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 8, textTransform: 'uppercase' }}>
-              Your feedback
-            </div>
-            {ownFeedback.loading ? (
-              <p style={{ fontSize: 12, color: '#6a8f80', margin: 0 }}>Loading feedback...</p>
-            ) : ownFeedback.error ? (
-              <p style={{ fontSize: 12, color: '#ff9a9a', margin: 0 }}>{ownFeedback.error}</p>
-            ) : (() => {
-              const match = RATING_PREFIX.exec(ownFeedback.text);
-              const rating = match ? Number(match[1]) : null;
-              const message = match ? ownFeedback.text.slice(match[0].length) : ownFeedback.text;
-              return (
-                <>
-                  {rating !== null && (
-                    <div style={{ marginBottom: 8 }}>
-                      {[1, 2, 3, 4, 5].map((n) => (
-                        <span key={n} style={{ fontSize: 16, color: n <= rating ? '#4dffb8' : '#3a4a44' }}>★</span>
-                      ))}
-                    </div>
-                  )}
-                  <p style={{ fontSize: 12, color: '#c4dcd0', margin: 0, lineHeight: 1.5 }}>{message || 'No message left'}</p>
-                </>
-              );
-            })()}
+        {isTerminalStatus && (isClient || isWorker) && (
+          <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
+            <FeedbackPanel title="Client → Worker" hasSubmitted={!!escrowData.hasClientFeedback} feedback={clientToWorkerFeedback} explorerBase={EXPLORER_BASE} />
+            <FeedbackPanel title="Worker → Client" hasSubmitted={!!escrowData.hasWorkerFeedback} feedback={workerToClientFeedback} explorerBase={EXPLORER_BASE} />
           </div>
         )}
 
@@ -1152,6 +1410,24 @@ export default function EscrowDetailPage() {
                   onClose={resetFeedbackModal}
                 />
               )}
+            </div>
+          </div>
+        )}
+
+        {expandedReasoning && (
+          <div
+            onClick={() => setExpandedReasoning(null)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ background: '#0a0f0d', border: '1px solid rgba(77,255,184,0.25)', borderRadius: 16, padding: 24, width: 480, maxWidth: '90%', maxHeight: '80vh', overflowY: 'auto' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 16, color: '#eafff5', margin: 0 }}>{expandedReasoning.agent}&apos;s reasoning</h2>
+                <span onClick={() => setExpandedReasoning(null)} style={{ color: '#6a8f80', cursor: 'pointer', fontSize: 18 }}>✕</span>
+              </div>
+              <Markdown text={expandedReasoning.text} color="#c4dcd0" fontSize={13} lineHeight={1.7} />
             </div>
           </div>
         )}

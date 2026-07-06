@@ -2,6 +2,17 @@ import { EscrowStatus } from "./hooks/useEscrow";
 
 export const STEP_LABELS = ["Created", "Submitted", "Challenge", "Resolved"] as const;
 
+/** One distinct accent color per phase (index-matched to STEP_LABELS), shared by the full-size
+ * and mini step trackers so a given phase always reads the same color in both places. Reached
+ * steps (done or current) render in their own phase color; only not-yet-reached steps fall
+ * back to a dim neutral gray. */
+export const STEP_COLORS: readonly string[] = [
+  "#4dffb8", // Created — green
+  "#4d9fff", // Submitted — blue
+  "#ffb44d", // Challenge — amber
+  "#c084fc", // Resolved — violet
+];
+
 // Real contract states only — there is no distinct "Reviewed" status on-chain (agent votes
 // accumulate silently until resolve() tallies 2-of-3), so that step is folded into "Submitted".
 const STEP_STATUS_ORDER: EscrowStatus[] = [

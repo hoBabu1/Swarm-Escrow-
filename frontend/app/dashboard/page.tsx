@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useAccount, useWriteContract } from 'wagmi';
 import { useEffect, useMemo, useState, useRef } from 'react';
+import type { ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import type { ComponentType } from 'react';
 import type { DatePickerProps } from 'react-datepicker';
@@ -21,7 +22,7 @@ import { StatCard, EscrowRowItem } from '@/components/EscrowUI';
 import { WalletButton } from '@/components/WalletButton';
 import { AdminNavLink } from '@/components/AdminNavLink';
 import { useTxLifecycle } from '@/lib/hooks/useTxLifecycle';
-import { truncate } from '@/lib/escrowFormat';
+import { truncate, parseFeedbackRating } from '@/lib/escrowFormat';
 
 const EXPLORER_BASE = botChainTestnet.blockExplorers.default.url;
 
@@ -57,6 +58,43 @@ function validateCreateEscrowForm(form: CreateEscrowFormState) {
   }
 
   return errors;
+}
+
+function EscrowSection({
+  title,
+  count,
+  emptyText,
+  children,
+  accent,
+}: {
+  title: string;
+  count: number;
+  emptyText: string;
+  children: ReactNode;
+  accent: string;
+}) {
+  return (
+    <section style={{ background: 'rgba(6,10,12,0.58)', border: `1px solid ${accent}`, borderRadius: 14, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '15px 18px', background: 'rgba(255,255,255,0.035)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <div>
+          <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 17, fontWeight: 700, color: '#eafff5', marginBottom: 2 }}>
+            {title}
+          </div>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: '#8fb5a8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            {count} {count === 1 ? 'escrow' : 'escrows'}
+          </div>
+        </div>
+        <span style={{ width: 10, height: 10, borderRadius: 999, background: accent, boxShadow: `0 0 18px ${accent}` }} />
+      </div>
+      {count === 0 ? (
+        <div style={{ padding: '22px 18px', color: '#a8d4c0', fontSize: 14 }}>
+          {emptyText}
+        </div>
+      ) : (
+        <div>{children}</div>
+      )}
+    </section>
+  );
 }
 
 export default function DashboardPage() {
@@ -165,10 +203,13 @@ export default function DashboardPage() {
       if (escrowId !== undefined) {
         const specHash = keccak256(toBytes(form.specText));
         try {
+          // receipt.transactionHash is the same confirmed hash as `txHash` (useWriteContract's
+          // own `data`) above — read off the receipt here since it's already in scope from
+          // decoding EscrowCreated, rather than threading a second variable through this effect.
           const res = await fetch('/api/escrow-specs', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ escrowId: escrowId.toString(), specText: form.specText, specHash }),
+            body: JSON.stringify({ escrowId: escrowId.toString(), specText: form.specText, specHash, txHash: receipt.transactionHash }),
           });
           if (!res.ok) {
             const body = await res.json().catch(() => ({}));
@@ -219,6 +260,18 @@ export default function DashboardPage() {
 
   const allEscrowIds = useMemo(() => [...clientIds, ...workerIds], [clientIds, workerIds]);
   const rating = useAddressFeedback(address, allEscrowIds);
+
+  // "Received" rows are already scoped to feedback the connected wallet was sent (not sent
+  // itself) — for any given escrow that's always the counterparty's rating of the connected
+  // wallet's role on that specific escrow, which is exactly the per-card badge below.
+  const ratingByEscrowId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of rating.rows) {
+      const parsed = parseFeedbackRating(row.text);
+      if (parsed !== null) map.set(String(row.escrowId), parsed);
+    }
+    return map;
+  }, [rating.rows]);
 
   const goToEscrow = (id: bigint) => {
     router.push(`/escrow/${id.toString()}`);
@@ -333,22 +386,17 @@ export default function DashboardPage() {
           />
         </div>
 
-        <div style={{ background: 'rgba(6,10,12,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, overflow: 'hidden' }}>
+        <div>
           {activeIdsLoading ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#6a8f80', fontSize: 12 }}>Loading escrows...</div>
+            <div style={{ padding: 24, textAlign: 'center', color: '#8fb5a8', fontSize: 13, background: 'rgba(6,10,12,0.58)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14 }}>Loading escrows...</div>
           ) : activeError ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#ff9a9a', fontSize: 12 }}>Couldn&apos;t load escrows from the chain. Try refreshing.</div>
+            <div style={{ padding: 24, textAlign: 'center', color: '#ff9a9a', fontSize: 13, background: 'rgba(6,10,12,0.58)', border: '1px solid rgba(255,90,90,0.25)', borderRadius: 14 }}>Couldn&apos;t load escrows from the chain. Try refreshing.</div>
           ) : filteredData.length === 0 ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#6a8f80', fontSize: 12 }}>No escrows found.</div>
+            <div style={{ padding: 24, textAlign: 'center', color: '#a8d4c0', fontSize: 13, background: 'rgba(6,10,12,0.58)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14 }}>No escrows found.</div>
           ) : (
-            <>
-              <div style={{ padding: '10px 16px', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace" }}>
-                Active
-              </div>
-              {activeTabEscrows.length === 0 ? (
-                <div style={{ padding: '0 16px 16px', fontSize: 12, color: '#6a8f80' }}>No active escrows</div>
-              ) : (
-                activeTabEscrows.map((escrow) => (
+            <div style={{ display: 'grid', gap: 18 }}>
+              <EscrowSection title="Active" count={activeTabEscrows.length} emptyText="No active escrows" accent="rgba(77,255,184,0.35)">
+                {activeTabEscrows.map((escrow) => (
                   <EscrowRowItem
                     key={escrow.id.toString()}
                     escrow={escrow}
@@ -356,17 +404,14 @@ export default function DashboardPage() {
                     onClick={() => goToEscrow(escrow.id)}
                     showStepTracker
                     now={now}
+                    actionNeeded={tab === 'client' && escrow.status === EscrowStatus.Created && now > Number(escrow.deadline) * 1000}
+                    ratingReceived={ratingByEscrowId.get(escrow.id.toString())}
                   />
-                ))
-              )}
+                ))}
+              </EscrowSection>
 
-              <div style={{ padding: '10px 16px', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                History
-              </div>
-              {historyTabEscrows.length === 0 ? (
-                <div style={{ padding: '0 16px 16px', fontSize: 12, color: '#6a8f80' }}>No history yet</div>
-              ) : (
-                historyTabEscrows.map((escrow) => (
+              <EscrowSection title="History" count={historyTabEscrows.length} emptyText="No history yet" accent="rgba(77,159,255,0.35)">
+                {historyTabEscrows.map((escrow) => (
                   <EscrowRowItem
                     key={escrow.id.toString()}
                     escrow={escrow}
@@ -374,10 +419,11 @@ export default function DashboardPage() {
                     onClick={() => goToEscrow(escrow.id)}
                     showStepTracker
                     now={now}
+                    ratingReceived={ratingByEscrowId.get(escrow.id.toString())}
                   />
-                ))
-              )}
-            </>
+                ))}
+              </EscrowSection>
+            </div>
           )}
         </div>
       </div>

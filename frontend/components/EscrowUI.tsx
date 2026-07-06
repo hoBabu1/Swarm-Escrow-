@@ -1,9 +1,29 @@
 import { ReactNode } from 'react';
 import { formatEther } from 'viem';
+import { Star } from 'lucide-react';
 import { EscrowWithId } from '@/lib/hooks/useEscrowsByIds';
 import { STATUS_LABELS } from '@/lib/escrowFormat';
 import { EscrowStatus } from '@/lib/hooks/useEscrow';
 import { MiniStepTracker } from './MiniStepTracker';
+
+/** Compact 5-star row for a single escrow's received rating — rounds to the nearest whole
+ * star (no half-stars in this condensed card view). */
+function StarRating({ rating }: { rating: number }) {
+  const filledCount = Math.max(0, Math.min(5, Math.round(rating)));
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+      {Array.from({ length: 5 }).map((_, i) => (
+        <Star
+          key={i}
+          size={13}
+          fill={i < filledCount ? '#ffd166' : 'none'}
+          color={i < filledCount ? '#ffd166' : 'rgba(255,255,255,0.15)'}
+          strokeWidth={1.5}
+        />
+      ))}
+    </div>
+  );
+}
 
 function formatCompactCountdown(ms: number) {
   if (ms <= 0) return '00:00:00';
@@ -48,6 +68,8 @@ export function EscrowRowItem({
   onClick,
   showStepTracker = false,
   now,
+  actionNeeded = false,
+  ratingReceived,
 }: {
   escrow: EscrowWithId;
   counterpartyLabel: string;
@@ -58,23 +80,42 @@ export function EscrowRowItem({
   /** Current time in ms, used to render the "Ends in" submission countdown for Created
    * escrows. Only needed by callers that pass showStepTracker (the dashboard). */
   now?: number;
+  /** True when this escrow's deadline has passed with no deliverable submitted and the
+   * connected wallet is the client — surfaces a badge pointing at the reclaim action on
+   * the detail page, without duplicating the button here. */
+  actionNeeded?: boolean;
+  /** The star rating the connected wallet's role on THIS escrow received from the
+   * counterparty, if that feedback has been left yet — omitted entirely otherwise. */
+  ratingReceived?: number;
 }) {
   const showCountdown = escrow.status === EscrowStatus.Created && now !== undefined;
 
   return (
     <div onClick={onClick} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer', gap: 16 }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, color: '#eafff5', fontWeight: 500, marginBottom: 4 }}>Escrow #{escrow.id.toString()}</div>
-        <div style={{ fontSize: 11, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{counterpartyLabel}</div>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13, color: '#eafff5', fontWeight: 500, marginBottom: 4 }}>Escrow #{escrow.id.toString()}</div>
+          <div style={{ fontSize: 11, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{counterpartyLabel}</div>
+        </div>
+        {ratingReceived !== undefined && <StarRating rating={ratingReceived} />}
       </div>
+      {showStepTracker && (
+        <div style={{ flexShrink: 0, margin: '0 8px' }}>
+          <MiniStepTracker status={escrow.status} />
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
-        {showStepTracker && <MiniStepTracker status={escrow.status} />}
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: 13, color: '#eafff5', fontFamily: "'JetBrains Mono', monospace", marginBottom: 6 }}>{formatEther(escrow.amount)} BOT</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
             {showCountdown && (
               <span style={{ fontSize: 10, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace" }}>
                 Ends in {formatCompactCountdown(Number(escrow.deadline) * 1000 - now!)}
+              </span>
+            )}
+            {actionNeeded && (
+              <span style={{ background: 'rgba(255,180,77,0.15)', color: '#ffb44d', fontSize: 10, padding: '4px 10px', borderRadius: 100, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>
+                Action needed
               </span>
             )}
             <StatusPill status={STATUS_LABELS[escrow.status]} />

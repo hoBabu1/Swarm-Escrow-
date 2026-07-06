@@ -12,6 +12,7 @@ export interface Database {
           verdict: boolean;
           reasoning_text: string;
           reasoning_hash: string;
+          tx_hash: string | null;
           created_at: string;
         };
         Insert: {
@@ -20,6 +21,7 @@ export interface Database {
           verdict: boolean;
           reasoning_text: string;
           reasoning_hash: string;
+          tx_hash?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["verdicts"]["Insert"]>;
       };
@@ -29,12 +31,14 @@ export interface Database {
           escrow_id: number;
           spec_text: string;
           spec_hash: string;
+          tx_hash: string | null;
           created_at: string;
         };
         Insert: {
           escrow_id: number;
           spec_text: string;
           spec_hash: string;
+          tx_hash?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["escrow_specs"]["Insert"]>;
       };
@@ -45,6 +49,7 @@ export interface Database {
           challenger_address: string;
           document_text: string;
           document_hash: string;
+          tx_hash: string | null;
           created_at: string;
         };
         Insert: {
@@ -52,6 +57,7 @@ export interface Database {
           challenger_address: string;
           document_text: string;
           document_hash: string;
+          tx_hash?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["challenge_docs"]["Insert"]>;
       };
@@ -62,6 +68,7 @@ export interface Database {
           sender_address: string;
           message_text: string;
           message_hash: string;
+          tx_hash: string | null;
           created_at: string;
         };
         Insert: {
@@ -69,6 +76,7 @@ export interface Database {
           sender_address: string;
           message_text: string;
           message_hash: string;
+          tx_hash?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["feedback_messages"]["Insert"]>;
       };

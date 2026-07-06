@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { keccak256, toBytes } from "viem";
-import { supabase } from "../supabase";
+import { selectWithTxHashFallback } from "../selectWithTxHashFallback";
 import { ZERO_HASH } from "./useEscrow";
 
 interface Params {
@@ -13,6 +13,7 @@ interface Params {
 interface FetchResult {
   key: string;
   text?: string;
+  txHash?: string | null;
   error?: string;
 }
 
@@ -35,19 +36,14 @@ export function useHashVerifiedText({ table, match, textColumn, onChainHash }: P
     let cancelled = false;
 
     (async () => {
-      let query = supabase.from(table).select(textColumn);
-      for (const [key, value] of Object.entries(JSON.parse(matchKey) as Record<string, string | number>)) {
-        query = query.eq(key, value);
-      }
-      const { data, error: fetchError } = await query.maybeSingle();
+      const { data, error: fetchError } = await selectWithTxHashFallback(table, JSON.parse(matchKey), textColumn);
       if (cancelled) return;
 
       if (fetchError) {
         setResult({ key: currentKey, error: "Failed to load text from Supabase" });
         return;
       }
-      const row = data as Record<string, string> | null;
-      setResult({ key: currentKey, text: row?.[textColumn] });
+      setResult({ key: currentKey, text: data?.[textColumn] ?? undefined, txHash: data?.tx_hash });
     })();
 
     return () => {
@@ -57,6 +53,7 @@ export function useHashVerifiedText({ table, match, textColumn, onChainHash }: P
 
   const isCurrent = result?.key === currentKey;
   const effectiveText = hasHash && isCurrent ? result.text : undefined;
+  const effectiveTxHash = hasHash && isCurrent ? (result.txHash ?? undefined) : undefined;
   const loading = hasHash && !isCurrent;
   const error = hasHash && isCurrent ? (result?.error ?? null) : null;
 
@@ -65,5 +62,5 @@ export function useHashVerifiedText({ table, match, textColumn, onChainHash }: P
       ? keccak256(toBytes(effectiveText)).toLowerCase() === onChainHash.toLowerCase()
       : undefined;
 
-  return { text: effectiveText, loading, error, matchesHash };
+  return { text: effectiveText, txHash: effectiveTxHash, loading, error, matchesHash };
 }

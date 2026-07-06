@@ -123,6 +123,7 @@ create table verdicts (
   verdict boolean,
   reasoning_text text,
   reasoning_hash text,
+  tx_hash text,           -- submitVerdict/submitSeniorArbiterVerdict tx hash, nullable (oracle not yet wired to set this)
   created_at timestamp default now()
 );
 
@@ -130,6 +131,7 @@ create table escrow_specs (
   escrow_id bigint,
   spec_text text,
   spec_hash text,
+  tx_hash text,           -- createEscrow tx hash, nullable for rows written before this column existed
   created_at timestamp default now()
 );
 
@@ -138,6 +140,7 @@ create table challenge_docs (
   challenger_address text,
   document_text text,
   document_hash text,
+  tx_hash text,           -- challenge() tx hash, set via a follow-up PATCH once the tx confirms
   created_at timestamp default now()
 );
 
@@ -146,6 +149,7 @@ create table feedback_messages (
   sender_address text,   -- client or worker address
   message_text text,
   message_hash text,
+  tx_hash text,           -- leaveFeedback() tx hash, set via a follow-up PATCH once the tx confirms
   created_at timestamp default now()
 );
 ```

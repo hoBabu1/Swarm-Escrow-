@@ -5,6 +5,8 @@ import { swarmEscrowConfig } from '@/lib/contract';
 import { EscrowStatus, EscrowStructTuple, parseEscrowTuple } from '@/lib/hooks/useEscrow';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { sameAddress } from '@/lib/escrowFormat';
+import { createIpRateLimiter } from '@/lib/rateLimit';
+import { verifyMinedTxOnContract } from '@/lib/verifyOnChainTx';
 
 const publicClient = createPublicClient({
   chain: botChainTestnet,
@@ -13,17 +15,7 @@ const publicClient = createPublicClient({
 
 // Same single-process, per-IP limiter as escrow-specs/challenge-docs — sufficient to blunt
 // spam for this hackathon deployment without pulling in an external store.
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX_REQUESTS = 10;
-const requestLog = new Map<string, number[]>();
-
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const timestamps = (requestLog.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  timestamps.push(now);
-  requestLog.set(ip, timestamps);
-  return timestamps.length >= RATE_LIMIT_MAX_REQUESTS;
-}
+const isRateLimited = createIpRateLimiter(60_000, 10);
 
 export async function POST(req: NextRequest) {
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
@@ -96,6 +88,46 @@ export async function POST(req: NextRequest) {
 
   if (error) {
     return NextResponse.json({ error: 'Failed to store feedback message' }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
+}
+
+// Called after the leaveFeedback() tx confirms, to attach the tx hash to the row already
+// written above (that write happens before the tx, since messageHash is an input to it).
+export async function PATCH(req: NextRequest) {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+  if (isRateLimited(ip)) {
+    return NextResponse.json({ error: 'Too many requests, try again shortly' }, { status: 429 });
+  }
+
+  let body: { escrowId?: number | string; senderAddress?: string; txHash?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+  }
+
+  const { escrowId, senderAddress, txHash } = body;
+  if (escrowId === undefined || Number.isNaN(Number(escrowId))) {
+    return NextResponse.json({ error: 'escrowId is required' }, { status: 400 });
+  }
+  if (!senderAddress || typeof senderAddress !== 'string') {
+    return NextResponse.json({ error: 'senderAddress is required' }, { status: 400 });
+  }
+  const verification = await verifyMinedTxOnContract(publicClient, txHash, swarmEscrowConfig.address);
+  if (!verification.ok) {
+    return NextResponse.json({ error: verification.message }, { status: 400 });
+  }
+
+  const { error } = await getSupabaseAdmin()
+    .from('feedback_messages')
+    .update({ tx_hash: txHash })
+    .eq('escrow_id', Number(escrowId))
+    .eq('sender_address', senderAddress);
+
+  if (error) {
+    return NextResponse.json({ error: 'Failed to store tx hash' }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });

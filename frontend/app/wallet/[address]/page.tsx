@@ -1,13 +1,13 @@
 'use client';
 
 import { useRouter, useParams } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { formatEther, isAddress } from 'viem';
 import { useClientEscrows, useWorkerEscrows } from '@/lib/hooks/useAddressEscrows';
-import { useEscrowsByIds, EscrowWithId } from '@/lib/hooks/useEscrowsByIds';
+import { useEscrowsByIds } from '@/lib/hooks/useEscrowsByIds';
 import { useEscrowStats } from '@/lib/hooks/useEscrowStats';
 import { useAddressFeedback } from '@/lib/hooks/useAddressFeedback';
-import { truncate, sameAddress } from '@/lib/escrowFormat';
+import { truncate, parseFeedbackRating } from '@/lib/escrowFormat';
 import { botChainTestnet } from '@/lib/chains';
 import { StatCard, EscrowRowItem } from '@/components/EscrowUI';
 import { WalletButton } from '@/components/WalletButton';
@@ -21,6 +21,12 @@ export default function WalletLookupPage() {
   const [tab, setTab] = useState<'client' | 'worker'>('worker');
   const [lookupAddr, setLookupAddr] = useState('');
   const lookupValid = lookupAddr.length > 0 && isAddress(lookupAddr);
+
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const handleLookup = () => {
     if (!lookupValid) return;
@@ -38,7 +44,19 @@ export default function WalletLookupPage() {
   const { escrows: workerEscrows, isLoading: workerEscrowsLoading, isError: workerEscrowsError } = useEscrowsByIds(workerIds);
 
   const allEscrowIds = useMemo(() => [...clientIds, ...workerIds], [clientIds, workerIds]);
-  const feedback = useAddressFeedback(validAddress, allEscrowIds);
+  const feedback = useAddressFeedback(validAddress, allEscrowIds, 'received');
+
+  // Same badge logic as the dashboard: "received" rows are already scoped to feedback the
+  // looked-up address was sent (not sent itself), so per escrow this is always the
+  // counterparty's rating of that address's role on that specific escrow.
+  const ratingByEscrowId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of feedback.rows) {
+      const parsed = parseFeedbackRating(row.text);
+      if (parsed !== null) map.set(String(row.escrowId), parsed);
+    }
+    return map;
+  }, [feedback.rows]);
 
   const activeEscrows = tab === 'client' ? clientEscrows : workerEscrows;
   const activeLoading = tab === 'client' ? clientIdsLoading || clientEscrowsLoading : workerIdsLoading || workerEscrowsLoading;
@@ -48,15 +66,6 @@ export default function WalletLookupPage() {
 
   const { totalEarned, totalPaidOut, activeCount } = useEscrowStats(clientEscrows, workerEscrows);
   const totalCount = clientIds.length + workerIds.length;
-
-  // Feedback rows only carry escrow_id + sender — look up which role the sender held on
-  // that specific escrow (they're guaranteed to be the counterparty, since useAddressFeedback
-  // already excludes rows sent by `address` itself) so the label reads "from client/worker X".
-  const escrowById = useMemo(() => {
-    const map = new Map<number, EscrowWithId>();
-    for (const e of [...clientEscrows, ...workerEscrows]) map.set(Number(e.id), e);
-    return map;
-  }, [clientEscrows, workerEscrows]);
 
   const goToEscrow = (id: string | number | bigint) => {
     router.push(`/escrow/${id.toString()}`);
@@ -181,46 +190,11 @@ export default function WalletLookupPage() {
                 escrow={escrow}
                 counterpartyLabel={tab === 'client' ? `worker ${truncate(escrow.worker)}` : `client ${truncate(escrow.client)}`}
                 onClick={() => goToEscrow(escrow.id)}
+                showStepTracker
+                now={now}
+                ratingReceived={ratingByEscrowId.get(escrow.id.toString())}
               />
             ))
-          )}
-        </div>
-
-        <div>
-          <div style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", marginBottom: 10 }}>
-            Feedback received
-          </div>
-          {feedback.loading ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#6a8f80', fontSize: 12, background: 'rgba(6,10,12,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12 }}>
-              Loading feedback...
-            </div>
-          ) : feedback.error ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#ff9a9a', fontSize: 12, background: 'rgba(6,10,12,0.4)', border: '1px solid rgba(255,90,90,0.25)', borderRadius: 12 }}>
-              Couldn&apos;t load feedback. Try refreshing.
-            </div>
-          ) : feedback.rows.length === 0 ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#6a8f80', fontSize: 12, background: 'rgba(6,10,12,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12 }}>
-              No feedback yet.
-            </div>
-          ) : (
-            feedback.rows.map((f, i) => {
-              const escrow = escrowById.get(f.escrowId);
-              const senderRole = escrow && sameAddress(escrow.client, f.senderAddress) ? 'client' : 'worker';
-              return (
-                <div
-                  key={i}
-                  onClick={() => goToEscrow(f.escrowId)}
-                  style={{ background: 'rgba(6,10,12,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '14px 16px', marginBottom: 8, cursor: 'pointer' }}
-                >
-                  <div style={{ fontSize: 12, color: '#c4dcd0', marginBottom: 6, lineHeight: 1.5 }}>&quot;{f.text}&quot;</div>
-                  <div style={{ fontSize: 10, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <span>from {senderRole} {truncate(f.senderAddress)}</span>
-                    <span>·</span>
-                    <span>escrow #{f.escrowId}</span>
-                  </div>
-                </div>
-              );
-            })
           )}
         </div>
       </div>

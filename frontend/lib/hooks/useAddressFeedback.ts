@@ -36,10 +36,14 @@ export interface AddressFeedbackSummary {
  * answers, so "still loading the current query" is distinguishable from "finished loading a
  * stale one" without setState at the top of the effect.
  */
-export function useAddressFeedback(address: string | undefined, escrowIds: readonly bigint[]): AddressFeedbackSummary {
+export function useAddressFeedback(
+  address: string | undefined,
+  escrowIds: readonly bigint[],
+  direction: "received" | "sent" = "received"
+): AddressFeedbackSummary {
   const idsKey = escrowIds.join(",");
   const hasQuery = !!address && escrowIds.length > 0;
-  const currentKey = `${address ?? ""}|${idsKey}`;
+  const currentKey = `${address ?? ""}|${idsKey}|${direction}`;
 
   const [result, setResult] = useState<FetchResult | null>(null);
 
@@ -61,7 +65,11 @@ export function useAddressFeedback(address: string | undefined, escrowIds: reado
       }
 
       const rows: ReceivedFeedbackRow[] = (data ?? [])
-        .filter((row) => !sameAddress(row.sender_address as string, address))
+        .filter((row) =>
+          direction === "received"
+            ? !sameAddress(row.sender_address as string, address)
+            : sameAddress(row.sender_address as string, address)
+        )
         .map((row) => ({
           escrowId: row.escrow_id as number,
           senderAddress: row.sender_address as string,
@@ -74,7 +82,7 @@ export function useAddressFeedback(address: string | undefined, escrowIds: reado
     return () => {
       cancelled = true;
     };
-  }, [hasQuery, currentKey, idsKey, address]);
+  }, [hasQuery, currentKey, idsKey, address, direction]);
 
   if (!hasQuery) {
     return { rows: [], average: null, count: 0, loading: false, error: null };

@@ -13,6 +13,15 @@ export function truncate(addr: string) {
   return `${addr.slice(0, 5)}...${addr.slice(-4)}`;
 }
 
+const FEEDBACK_RATING_PREFIX = /^(\d)\/5/;
+
+/** Feedback messages are stored as "{rating}/5 — {text}" with no separate on-chain rating
+ * field — this pulls just the numeric rating back out, or null if the text doesn't match. */
+export function parseFeedbackRating(text: string): number | null {
+  const match = FEEDBACK_RATING_PREFIX.exec(text);
+  return match ? Number(match[1]) : null;
+}
+
 /** Ethereum addresses are case-insensitive — every equality check against one must go through this. */
 export function sameAddress(a: string | undefined | null, b: string | undefined | null): boolean {
   return !!a && !!b && a.toLowerCase() === b.toLowerCase();
@@ -29,6 +38,7 @@ const RACE_REVERT_REASONS = [
   "consensus not reached",
   "challenge window not passed",
   "senior arbiter window not passed",
+  "already resolved",
 ];
 
 export function isLikelyAlreadyHandledError(error: { message?: string } | null | undefined): boolean {
