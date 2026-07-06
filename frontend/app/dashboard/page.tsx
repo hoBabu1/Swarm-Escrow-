@@ -3,7 +3,11 @@
 import { useRouter } from 'next/navigation';
 import { useAccount, useDisconnect, useWriteContract } from 'wagmi';
 import { useEffect, useMemo, useState, useRef } from 'react';
+import dynamic from 'next/dynamic';
+import type { ComponentType } from 'react';
+import type { DatePickerProps } from 'react-datepicker';
 import { decodeEventLog, formatEther, isAddress, keccak256, parseEther, toBytes } from 'viem';
+import 'react-datepicker/dist/react-datepicker.css';
 import { swarmEscrowConfig } from '@/lib/contract';
 import { SWARM_ESCROW_ABI } from '@/lib/abi';
 import { botChainTestnet } from '@/lib/chains';
@@ -18,12 +22,20 @@ import { truncate } from '@/lib/escrowFormat';
 
 const EXPLORER_BASE = botChainTestnet.blockExplorers.default.url;
 
+// react-datepicker's default export is a class component whose `defaultProps` type
+// doesn't structurally satisfy next/dynamic's loader signature, hence the double cast.
+const DatePicker = dynamic<DatePickerProps>(
+  () => import('react-datepicker').then((mod) => mod.default as unknown as ComponentType<DatePickerProps>),
+  { ssr: false }
+);
+
 interface CreateEscrowFormState {
   workerAddress: string;
   amount: string;
-  deadlineDays: string;
   specText: string;
 }
+
+type TouchedState = Partial<Record<keyof CreateEscrowFormState, boolean>> & { deadline?: boolean };
 
 function validateCreateEscrowForm(form: CreateEscrowFormState) {
   const errors: Partial<Record<keyof CreateEscrowFormState, string>> = {};
@@ -35,11 +47,6 @@ function validateCreateEscrowForm(form: CreateEscrowFormState) {
   const amountNum = Number(form.amount);
   if (!form.amount || Number.isNaN(amountNum) || amountNum <= 0) {
     errors.amount = 'Enter an amount greater than 0';
-  }
-
-  const deadlineNum = Number(form.deadlineDays);
-  if (!form.deadlineDays || !Number.isInteger(deadlineNum) || deadlineNum <= 0) {
-    errors.deadlineDays = 'Enter a positive whole number of days';
   }
 
   if (form.specText.trim().length === 0) {
@@ -58,13 +65,18 @@ export default function DashboardPage() {
   const [walletDD, setWalletDD] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
 
-  const [form, setForm] = useState<CreateEscrowFormState>({ workerAddress: '', amount: '', deadlineDays: '', specText: '' });
-  const [touched, setTouched] = useState<Partial<Record<keyof CreateEscrowFormState, boolean>>>({});
+  const [form, setForm] = useState<CreateEscrowFormState>({ workerAddress: '', amount: '', specText: '' });
+  const [touched, setTouched] = useState<TouchedState>({});
+  const [deadlineDate, setDeadlineDate] = useState<Date | null>(null);
   const [supabaseSaveError, setSupabaseSaveError] = useState<string | null>(null);
   const specSaved = useRef(false);
 
   const errors = validateCreateEscrowForm(form);
-  const isFormValid = Object.keys(errors).length === 0;
+  const deadlineValid = deadlineDate !== null && deadlineDate.getTime() > Date.now();
+  const isFormValid = Object.keys(errors).length === 0 && deadlineValid;
+  // Recomputed each time the modal opens so "now" doesn't go stale across sessions,
+  // but stable within a single open modal to avoid reallocating on every keystroke.
+  const datePickerMinDate = useMemo(() => new Date(), [modalOpen]);
 
   const {
     data: clientIdsData,
@@ -178,8 +190,9 @@ export default function DashboardPage() {
 
   const closeModal = () => {
     setModalOpen(false);
-    setForm({ workerAddress: '', amount: '', deadlineDays: '', specText: '' });
+    setForm({ workerAddress: '', amount: '', specText: '' });
     setTouched({});
+    setDeadlineDate(null);
     setSupabaseSaveError(null);
     specSaved.current = false;
     resetWrite();
@@ -187,10 +200,11 @@ export default function DashboardPage() {
 
   const handleFundEscrow = () => {
     if (txState !== 'idle') return;
-    setTouched({ workerAddress: true, amount: true, deadlineDays: true, specText: true });
+    setTouched({ workerAddress: true, amount: true, specText: true, deadline: true });
     if (!isFormValid) return;
 
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + Number(form.deadlineDays) * 86400);
+    const deadlineTimestamp = Math.floor(deadlineDate!.getTime() / 1000);
+    const deadline = BigInt(deadlineTimestamp);
     const specHash = keccak256(toBytes(form.specText));
 
     writeContract({
@@ -353,19 +367,30 @@ export default function DashboardPage() {
                   <div style={{ fontSize: 10, color: '#ff9a9a', marginBottom: 10 }}>{errors.amount}</div>
                 )}
 
-                <label style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", display: 'block', marginBottom: 6, marginTop: touched.amount && errors.amount ? 0 : 10 }}>Deadline (days)</label>
-                <input
-                  value={form.deadlineDays}
-                  onChange={(e) => setForm((f) => ({ ...f, deadlineDays: e.target.value }))}
-                  onBlur={() => setTouched((t) => ({ ...t, deadlineDays: true }))}
-                  placeholder="7"
-                  style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: `1px solid ${touched.deadlineDays && errors.deadlineDays ? '#ff9a9a' : 'rgba(255,255,255,0.12)'}`, borderRadius: 8, padding: '10px 12px', color: '#eafff5', fontFamily: "'JetBrains Mono', monospace", fontSize: 12, outline: 'none', marginBottom: 4, boxSizing: 'border-box' }}
+                <label style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", display: 'block', marginBottom: 6, marginTop: touched.amount && errors.amount ? 0 : 10 }}>Deadline</label>
+                <DatePicker
+                  selected={deadlineDate}
+                  onChange={(date: Date | null) => setDeadlineDate(date)}
+                  onBlur={() => setTouched((t) => ({ ...t, deadline: true }))}
+                  showTimeSelect
+                  timeFormat="HH:mm"
+                  timeIntervals={15}
+                  dateFormat="MMM d, yyyy 'at' h:mm aa"
+                  minDate={datePickerMinDate}
+                  placeholderText="Select deadline date & time"
+                  className={`swarm-datepicker-input${touched.deadline && !deadlineValid ? ' swarm-datepicker-input--error' : ''}`}
+                  wrapperClassName="swarm-datepicker-wrapper"
+                  calendarClassName="swarm-datepicker-calendar"
+                  popperPlacement="bottom-start"
                 />
-                {touched.deadlineDays && errors.deadlineDays && (
-                  <div style={{ fontSize: 10, color: '#ff9a9a', marginBottom: 10 }}>{errors.deadlineDays}</div>
+                {touched.deadline && !deadlineValid && (
+                  <div style={{ fontSize: 10, color: '#ff9a9a', marginTop: 4, marginBottom: 8 }}>Select a deadline in the future</div>
                 )}
+                <div style={{ fontSize: 10, color: '#6a8f80', marginTop: touched.deadline && !deadlineValid ? 0 : 8, marginBottom: 14 }}>
+                  Worker must deliver before this date, or you can reclaim funds via reclaimAfterDeadline.
+                </div>
 
-                <label style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", display: 'block', marginBottom: 6, marginTop: touched.deadlineDays && errors.deadlineDays ? 0 : 10 }}>Deliverable spec / terms</label>
+                <label style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", display: 'block', marginBottom: 6 }}>Deliverable spec / terms</label>
                 <textarea
                   value={form.specText}
                   onChange={(e) => setForm((f) => ({ ...f, specText: e.target.value }))}
