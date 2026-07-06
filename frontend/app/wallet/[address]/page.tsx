@@ -73,14 +73,14 @@ export default function WalletLookupPage() {
 
   return (
     <div style={{ background: '#060a0c', position: 'relative', minHeight: '100vh', fontFamily: "'Sora', sans-serif" }}>
-      <div style={{ position: 'relative', zIndex: 1, padding: '24px 32px', maxWidth: 720, margin: '0 auto' }}>
-        <div onClick={() => router.push('/')} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20, color: '#8fb5a8', fontSize: 12, cursor: 'pointer' }}>
+      <div style={{ position: 'relative', zIndex: 1, padding: '32px 48px', maxWidth: 960, margin: '0 auto' }}>
+        <div onClick={() => router.push('/')} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28, color: '#8fb5a8', fontSize: 16, cursor: 'pointer' }}>
           ← Back to landing
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 32 }}>
-          <div onClick={() => router.push('/')} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-            <svg width="26" height="26" viewBox="0 0 28 28">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 22, marginBottom: 44 }}>
+          <div onClick={() => router.push('/')} style={{ display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer' }}>
+            <svg width="37" height="37" viewBox="0 0 28 28">
               <circle cx="14" cy="6" r="3.4" fill="#4dffb8" />
               <circle cx="5" cy="21" r="3.4" fill="#4d9fff" />
               <circle cx="23" cy="21" r="3.4" fill="#4dffb8" />
@@ -88,52 +88,52 @@ export default function WalletLookupPage() {
               <line x1="14" y1="6" x2="23" y2="21" stroke="rgba(200,255,230,0.4)" strokeWidth="1.4" />
               <line x1="5" y1="21" x2="23" y2="21" stroke="rgba(200,255,230,0.4)" strokeWidth="1.4" />
             </svg>
-            <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 15, fontWeight: 700, color: '#eafff5' }}>Swarm Escrow</span>
+            <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 21, fontWeight: 700, color: '#eafff5' }}>Swarm Escrow</span>
           </div>
           <WalletButton />
         </div>
 
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 6, textTransform: 'uppercase' }}>
+        <div style={{ marginBottom: 34 }}>
+          <div style={{ fontSize: 15, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 9, textTransform: 'uppercase' }}>
             Public wallet history · read-only
           </div>
           <a
             href={`${EXPLORER_BASE}/address/${address}`}
             target="_blank"
             rel="noopener noreferrer"
-            style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 18, color: '#eafff5', fontWeight: 700, wordBreak: 'break-all', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: 8 }}
+            style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 25, color: '#eafff5', fontWeight: 700, wordBreak: 'break-all', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: 12 }}
           >
             {address} ↗
           </a>
         </div>
 
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 8 }}>Look up another wallet</div>
-          <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ marginBottom: 34 }}>
+          <div style={{ fontSize: 15, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 12 }}>Look up another wallet</div>
+          <div style={{ display: 'flex', gap: 12 }}>
             <input
               value={lookupAddr}
               onChange={(e) => setLookupAddr(e.target.value)}
               placeholder="0x..."
-              style={{ flex: 1, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '10px 12px', color: '#eafff5', fontFamily: "'JetBrains Mono', monospace", fontSize: 12, outline: 'none' }}
+              style={{ flex: 1, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '14px 16px', color: '#eafff5', fontFamily: "'JetBrains Mono', monospace", fontSize: 15, outline: 'none' }}
             />
             <button
               disabled={!lookupValid}
               onClick={handleLookup}
-              style={{ background: '#4d9fff', color: '#03101f', border: 'none', padding: '10px 18px', borderRadius: 8, fontWeight: 700, fontSize: 12, fontFamily: "'Sora', sans-serif", cursor: lookupValid ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap', opacity: lookupValid ? 1 : 0.5 }}
+              style={{ background: '#4d9fff', color: '#03101f', border: 'none', padding: '14px 24px', borderRadius: 10, fontWeight: 700, fontSize: 15, fontFamily: "'Sora', sans-serif", cursor: lookupValid ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap', opacity: lookupValid ? 1 : 0.5 }}
             >
               View history
             </button>
           </div>
-          {lookupAddr.length > 0 && !lookupValid && <p style={{ color: '#ff9a9a', fontSize: 11, marginTop: 8 }}>Enter a valid address</p>}
+          {lookupAddr.length > 0 && !lookupValid && <p style={{ color: '#ff9a9a', fontSize: 14, marginTop: 12 }}>Enter a valid address</p>}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 34 }}>
           {statsLoading ? (
             Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 14, height: 62 }} />
+              <div key={i} style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 18, height: 82 }} />
             ))
           ) : statsError ? (
-            <div style={{ gridColumn: '1 / -1', padding: 14, textAlign: 'center', color: '#ff9a9a', fontSize: 12, background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(255,90,90,0.25)', borderRadius: 12 }}>
+            <div style={{ gridColumn: '1 / -1', padding: 18, textAlign: 'center', color: '#ff9a9a', fontSize: 15, background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(255,90,90,0.25)', borderRadius: 16 }}>
               Couldn&apos;t load account stats from the chain. Try refreshing.
             </div>
           ) : (
@@ -146,10 +146,10 @@ export default function WalletLookupPage() {
                 label="Rating"
                 value={
                   feedback.loading ? '...' : feedback.count === 0 ? (
-                    <span style={{ fontSize: 13 }}>No ratings yet</span>
+                    <span style={{ fontSize: 17 }}>No ratings yet</span>
                   ) : (
                     <>
-                      {feedback.average!.toFixed(1)} ★ <span style={{ fontSize: 11, color: '#6a8f80', fontWeight: 400 }}>({feedback.count})</span>
+                      {feedback.average!.toFixed(1)} ★ <span style={{ fontSize: 15, color: '#6a8f80', fontWeight: 400 }}>({feedback.count})</span>
                     </>
                   )
                 }
@@ -159,28 +159,28 @@ export default function WalletLookupPage() {
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: 4, width: 'fit-content' }}>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 22, background: 'rgba(255,255,255,0.04)', borderRadius: 13, padding: 6, width: 'fit-content' }}>
           <button
             onClick={() => setTab('client')}
-            style={{ background: tab === 'client' ? '#4dffb8' : 'transparent', color: tab === 'client' ? '#06120c' : '#a8d4c0', border: 'none', padding: '8px 18px', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+            style={{ background: tab === 'client' ? '#4dffb8' : 'transparent', color: tab === 'client' ? '#06120c' : '#a8d4c0', border: 'none', padding: '11px 26px', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}
           >
             As client
           </button>
           <button
             onClick={() => setTab('worker')}
-            style={{ background: tab === 'worker' ? '#4dffb8' : 'transparent', color: tab === 'worker' ? '#06120c' : '#a8d4c0', border: 'none', padding: '8px 18px', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+            style={{ background: tab === 'worker' ? '#4dffb8' : 'transparent', color: tab === 'worker' ? '#06120c' : '#a8d4c0', border: 'none', padding: '11px 26px', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}
           >
             As worker
           </button>
         </div>
 
-        <div style={{ background: 'rgba(6,10,12,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, overflow: 'hidden', marginBottom: 24 }}>
+        <div style={{ background: 'rgba(6,10,12,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, overflow: 'hidden', marginBottom: 34 }}>
           {activeLoading ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#6a8f80', fontSize: 12 }}>Loading escrows...</div>
+            <div style={{ padding: 34, textAlign: 'center', color: '#6a8f80', fontSize: 15 }}>Loading escrows...</div>
           ) : activeError ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#ff9a9a', fontSize: 12 }}>Couldn&apos;t load escrows from the chain. Try refreshing.</div>
+            <div style={{ padding: 34, textAlign: 'center', color: '#ff9a9a', fontSize: 15 }}>Couldn&apos;t load escrows from the chain. Try refreshing.</div>
           ) : activeEscrows.length === 0 ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#6a8f80', fontSize: 12 }}>
+            <div style={{ padding: 34, textAlign: 'center', color: '#6a8f80', fontSize: 15 }}>
               No escrows as {tab}.
             </div>
           ) : (

@@ -17,22 +17,22 @@ export function MiniStepTracker({ status }: { status: EscrowStatus }) {
         const label = i === 2 && labelOverride ? labelOverride : stepLabel;
         return (
           <div key={stepLabel} style={{ display: 'flex', alignItems: 'center' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 34 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 46 }}>
               <div style={{
-                width: 13, height: 13, borderRadius: '50%', flexShrink: 0,
+                width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
                 background: reached ? phaseColor : 'rgba(255,255,255,0.08)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 color: reached ? '#06120c' : '#6a8f80',
-                fontSize: 7, fontWeight: 700,
+                fontSize: 9, fontWeight: 700,
               }}>
                 {done ? '✓' : i + 1}
               </div>
-              <span style={{ fontSize: 8, color: reached ? phaseColor : '#6a8f80', marginTop: 3, fontFamily: "'JetBrains Mono', monospace", textAlign: 'center', lineHeight: 1.1 }}>
+              <span style={{ fontSize: 11, color: reached ? phaseColor : '#6a8f80', marginTop: 4, fontFamily: "'JetBrains Mono', monospace", textAlign: 'center', lineHeight: 1.1 }}>
                 {label}
               </span>
             </div>
             {i < STEP_LABELS.length - 1 && (
-              <div style={{ width: 12, height: 1.5, flexShrink: 0, background: i < currentIndex ? phaseColor : 'rgba(255,255,255,0.1)', marginBottom: 10 }} />
+              <div style={{ width: 16, height: 2, flexShrink: 0, background: i < currentIndex ? phaseColor : 'rgba(255,255,255,0.1)', marginBottom: 13 }} />
             )}
           </div>
         );

@@ -14,7 +14,7 @@ export function AdminNavLink() {
   return (
     <span
       onClick={() => router.push('/admin')}
-      style={{ fontSize: 11, color: '#ffb44d', cursor: 'pointer', fontFamily: "'JetBrains Mono', monospace" }}
+      style={{ fontSize: 15, color: '#ffb44d', cursor: 'pointer', fontFamily: "'JetBrains Mono', monospace" }}
     >
       Admin
     </span>

@@ -78,9 +78,9 @@ function ParamField({ label, fn, currentValue, onConfirmed }: { label: string; f
   const busy = txState === 'approve' || txState === 'confirming';
 
   return (
-    <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: 14 }}>
-      <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 8 }}>{label}</div>
-      <div style={{ display: 'flex', gap: 8 }}>
+    <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: 20 }}>
+      <div style={{ fontSize: 15, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 12 }}>{label}</div>
+      <div style={{ display: 'flex', gap: 12 }}>
         <input
           value={value}
           onChange={(e) => {
@@ -92,24 +92,24 @@ function ParamField({ label, fn, currentValue, onConfirmed }: { label: string; f
           }}
           onBlur={() => setTouched(true)}
           disabled={busy}
-          style={{ flex: 1, background: 'rgba(255,255,255,0.04)', border: `1px solid ${error ? '#ff9a9a' : 'rgba(255,255,255,0.12)'}`, borderRadius: 8, padding: '8px 10px', color: '#eafff5', fontFamily: "'JetBrains Mono', monospace", fontSize: 12, outline: 'none', minWidth: 0 }}
+          style={{ flex: 1, background: 'rgba(255,255,255,0.04)', border: `1px solid ${error ? '#ff9a9a' : 'rgba(255,255,255,0.12)'}`, borderRadius: 10, padding: '11px 14px', color: '#eafff5', fontFamily: "'JetBrains Mono', monospace", fontSize: 15, outline: 'none', minWidth: 0 }}
         />
         <button
           onClick={handleUpdate}
           disabled={busy}
-          style={{ background: busy ? 'rgba(255,255,255,0.08)' : '#4dffb8', color: busy ? '#4a5550' : '#06120c', border: 'none', padding: '8px 14px', borderRadius: 8, fontWeight: 700, fontSize: 11, cursor: busy ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
+          style={{ background: busy ? 'rgba(255,255,255,0.08)' : '#4dffb8', color: busy ? '#4a5550' : '#06120c', border: 'none', padding: '11px 19px', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: busy ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
         >
           {txState === 'approve' ? 'Approve...' : txState === 'confirming' ? 'Confirming...' : 'Update'}
         </button>
       </div>
-      {error && <div style={{ fontSize: 10, color: '#ff9a9a', marginTop: 6 }}>{error}</div>}
+      {error && <div style={{ fontSize: 13, color: '#ff9a9a', marginTop: 8 }}>{error}</div>}
       {writeError && !error && (
-        <div style={{ fontSize: 10, color: '#ff9a9a', marginTop: 6 }}>
+        <div style={{ fontSize: 13, color: '#ff9a9a', marginTop: 8 }}>
           {writeError.message.includes('User rejected') ? 'Transaction rejected in wallet' : 'Transaction failed, try again'}
         </div>
       )}
-      {txState === 'reverted' && <div style={{ fontSize: 10, color: '#ff9a9a', marginTop: 6 }}>Transaction reverted on-chain</div>}
-      {isConfirmed && <div style={{ fontSize: 10, color: '#4dffb8', marginTop: 6 }}>Updated</div>}
+      {txState === 'reverted' && <div style={{ fontSize: 13, color: '#ff9a9a', marginTop: 8 }}>Transaction reverted on-chain</div>}
+      {isConfirmed && <div style={{ fontSize: 13, color: '#4dffb8', marginTop: 8 }}>Updated</div>}
     </div>
   );
 }
@@ -180,7 +180,7 @@ export default function AdminPage() {
   if (!isConnected) {
     return (
       <div style={{ background: '#060a0c', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Sora', sans-serif" }}>
-        <p style={{ color: '#6a8f80', fontSize: 13 }}>Connect the owner wallet to access this page.</p>
+        <p style={{ color: '#6a8f80', fontSize: 17 }}>Connect the owner wallet to access this page.</p>
       </div>
     );
   }
@@ -189,9 +189,9 @@ export default function AdminPage() {
   // instead of falling through to the "not owner" branch below.
   if (ownerError) {
     return (
-      <div style={{ background: '#060a0c', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, fontFamily: "'Sora', sans-serif" }}>
-        <p style={{ color: '#ff9a9a', fontSize: 13 }}>Couldn&apos;t verify owner access from the chain.</p>
-        <span onClick={() => window.location.reload()} style={{ color: '#4d9fff', fontSize: 12, cursor: 'pointer' }}>Retry</span>
+      <div style={{ background: '#060a0c', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, fontFamily: "'Sora', sans-serif" }}>
+        <p style={{ color: '#ff9a9a', fontSize: 17 }}>Couldn&apos;t verify owner access from the chain.</p>
+        <span onClick={() => window.location.reload()} style={{ color: '#4d9fff', fontSize: 15, cursor: 'pointer' }}>Retry</span>
       </div>
     );
   }
@@ -201,7 +201,7 @@ export default function AdminPage() {
   if (!ownerResolved) {
     return (
       <div style={{ background: '#060a0c', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Sora', sans-serif" }}>
-        <p style={{ color: '#6a8f80', fontSize: 13 }}>Checking owner access...</p>
+        <p style={{ color: '#6a8f80', fontSize: 17 }}>Checking owner access...</p>
       </div>
     );
   }
@@ -234,10 +234,10 @@ export default function AdminPage() {
 
   return (
     <div style={{ background: '#060a0c', position: 'relative', minHeight: '100vh', fontFamily: "'Sora', sans-serif" }}>
-      <div style={{ position: 'relative', zIndex: 1, padding: '24px 32px', maxWidth: 800, margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <svg width="26" height="26" viewBox="0 0 28 28">
+      <div style={{ position: 'relative', zIndex: 1, padding: '32px 48px', maxWidth: 1080, margin: '0 auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 22, marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <svg width="36" height="36" viewBox="0 0 28 28">
               <circle cx="14" cy="6" r="3.4" fill="#4dffb8" />
               <circle cx="5" cy="21" r="3.4" fill="#4d9fff" />
               <circle cx="23" cy="21" r="3.4" fill="#4dffb8" />
@@ -245,22 +245,22 @@ export default function AdminPage() {
               <line x1="14" y1="6" x2="23" y2="21" stroke="rgba(200,255,230,0.4)" strokeWidth="1.4" />
               <line x1="5" y1="21" x2="23" y2="21" stroke="rgba(200,255,230,0.4)" strokeWidth="1.4" />
             </svg>
-            <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 15, fontWeight: 700, color: '#eafff5' }}>Swarm Escrow</span>
-            <span style={{ background: 'rgba(255,180,77,0.12)', color: '#ffb44d', fontSize: 10, padding: '4px 10px', borderRadius: 100, fontFamily: "'JetBrains Mono', monospace", marginLeft: 6 }}>
+            <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 21, fontWeight: 700, color: '#eafff5' }}>Swarm Escrow</span>
+            <span style={{ background: 'rgba(255,180,77,0.12)', color: '#ffb44d', fontSize: 13, padding: '5px 14px', borderRadius: 100, fontFamily: "'JetBrains Mono', monospace", marginLeft: 8 }}>
               Admin only
             </span>
           </div>
           <WalletButton />
         </div>
-        <div style={{ fontSize: 11, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", marginBottom: 20 }}>
+        <div style={{ fontSize: 15, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", marginBottom: 28 }}>
           Connected as owner · {truncate(address || '')}
         </div>
 
-        <div style={{ marginBottom: 28 }}>
+        <div style={{ marginBottom: 38 }}>
           {escrowsLoading ? (
-            <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 14, height: 62 }} />
+            <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 20, height: 84 }} />
           ) : escrowsError ? (
-            <div style={{ padding: 14, textAlign: 'center', color: '#ff9a9a', fontSize: 12, background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(255,90,90,0.25)', borderRadius: 12 }}>
+            <div style={{ padding: 20, textAlign: 'center', color: '#ff9a9a', fontSize: 16, background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(255,90,90,0.25)', borderRadius: 16 }}>
               Couldn&apos;t load escrow totals from the chain. Try refreshing.
             </div>
           ) : (
@@ -272,10 +272,10 @@ export default function AdminPage() {
           )}
         </div>
 
-        <div style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", marginBottom: 12 }}>
+        <div style={{ fontSize: 15, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", marginBottom: 16 }}>
           Contract parameters
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 32 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, marginBottom: 44 }}>
           <ParamField
             label="Challenge window (seconds)"
             fn="setChallengeWindow"
@@ -302,44 +302,44 @@ export default function AdminPage() {
           />
         </div>
 
-        <div style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", marginBottom: 12 }}>
+        <div style={{ fontSize: 15, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", marginBottom: 16 }}>
           All escrows · emergency rescue
         </div>
-        <div style={{ background: 'rgba(6,10,12,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ background: 'rgba(6,10,12,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, overflow: 'hidden' }}>
           {escrowsLoading ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#6a8f80', fontSize: 12 }}>Loading escrows...</div>
+            <div style={{ padding: 32, textAlign: 'center', color: '#6a8f80', fontSize: 16 }}>Loading escrows...</div>
           ) : escrowsError ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#ff9a9a', fontSize: 12 }}>Couldn&apos;t load escrows from the chain. Try refreshing.</div>
+            <div style={{ padding: 32, textAlign: 'center', color: '#ff9a9a', fontSize: 16 }}>Couldn&apos;t load escrows from the chain. Try refreshing.</div>
           ) : escrows.length === 0 ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#6a8f80', fontSize: 12 }}>No escrows yet.</div>
+            <div style={{ padding: 32, textAlign: 'center', color: '#6a8f80', fontSize: 16 }}>No escrows yet.</div>
           ) : (
             escrows.map((e, i) => {
               const rescueState = computeRescueState(e, blockTimestamp, emergencyDelay);
               return (
                 <div
                   key={e.id.toString()}
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: i < escrows.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none', flexWrap: 'wrap', gap: 10 }}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '19px 22px', borderBottom: i < escrows.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none', flexWrap: 'wrap', gap: 14 }}
                 >
                   <div>
-                    <div style={{ fontSize: 13, color: '#eafff5', fontWeight: 500, marginBottom: 4 }}>Escrow #{e.id.toString()}</div>
-                    <div style={{ fontSize: 11, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace" }}>
+                    <div style={{ fontSize: 17, color: '#eafff5', fontWeight: 500, marginBottom: 6 }}>Escrow #{e.id.toString()}</div>
+                    <div style={{ fontSize: 15, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace" }}>
                       {Number(formatEther(e.amount)).toFixed(2)} BOT · client {truncate(e.client)} · worker {truncate(e.worker)}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                     <StatusPill status={STATUS_LABELS[e.status]} />
                     {rescueState === 'terminal' && (
-                      <button disabled style={{ background: 'rgba(255,255,255,0.04)', color: '#4a5550', border: '1px solid rgba(255,255,255,0.08)', padding: '7px 14px', borderRadius: 100, fontWeight: 700, fontSize: 11, cursor: 'not-allowed', whiteSpace: 'nowrap' }}>
+                      <button disabled style={{ background: 'rgba(255,255,255,0.04)', color: '#4a5550', border: '1px solid rgba(255,255,255,0.08)', padding: '10px 19px', borderRadius: 100, fontWeight: 700, fontSize: 15, cursor: 'not-allowed', whiteSpace: 'nowrap' }}>
                         Terminal
                       </button>
                     )}
                     {rescueState === 'locked' && (
-                      <button disabled style={{ background: 'rgba(255,255,255,0.04)', color: '#4a5550', border: '1px solid rgba(255,255,255,0.08)', padding: '7px 14px', borderRadius: 100, fontWeight: 700, fontSize: 11, cursor: 'not-allowed', whiteSpace: 'nowrap' }}>
+                      <button disabled style={{ background: 'rgba(255,255,255,0.04)', color: '#4a5550', border: '1px solid rgba(255,255,255,0.08)', padding: '10px 19px', borderRadius: 100, fontWeight: 700, fontSize: 15, cursor: 'not-allowed', whiteSpace: 'nowrap' }}>
                         Rescue locked
                       </button>
                     )}
                     {rescueState === 'available' && (
-                      <button onClick={() => openRescueConfirm(e)} style={{ background: 'transparent', color: '#ff9a9a', border: '1px solid rgba(255,154,154,0.4)', padding: '7px 14px', borderRadius: 100, fontWeight: 700, fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      <button onClick={() => openRescueConfirm(e)} style={{ background: 'transparent', color: '#ff9a9a', border: '1px solid rgba(255,154,154,0.4)', padding: '10px 19px', borderRadius: 100, fontWeight: 700, fontSize: 15, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                         Rescue available
                       </button>
                     )}
@@ -353,40 +353,40 @@ export default function AdminPage() {
 
       {rescueTarget && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
-          <div style={{ background: '#0a0f0d', border: '1px solid rgba(255,154,154,0.3)', borderRadius: 16, padding: 24, width: 380, maxWidth: '90%' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 16, color: '#eafff5', margin: 0 }}>Emergency rescue #{rescueTarget.id.toString()}</h2>
+          <div style={{ background: '#0a0f0d', border: '1px solid rgba(255,154,154,0.3)', borderRadius: 20, padding: 34, width: 500, maxWidth: '90%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+              <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 21, color: '#eafff5', margin: 0 }}>Emergency rescue #{rescueTarget.id.toString()}</h2>
               {(rescueTxState === 'approve' || rescueTxState === 'confirming') ? (
-                <span style={{ color: '#3a4a44', fontSize: 18, lineHeight: 1 }}>✕</span>
+                <span style={{ color: '#3a4a44', fontSize: 24, lineHeight: 1 }}>✕</span>
               ) : (
-                <span onClick={closeRescueConfirm} style={{ color: '#6a8f80', cursor: 'pointer', fontSize: 18 }}>✕</span>
+                <span onClick={closeRescueConfirm} style={{ color: '#6a8f80', cursor: 'pointer', fontSize: 24 }}>✕</span>
               )}
             </div>
 
             {rescueTxState === 'idle' && (
               <>
-                <div style={{ fontSize: 11, color: '#ffb44d', fontFamily: "'JetBrains Mono', monospace", marginBottom: 16, lineHeight: 1.5 }}>
+                <div style={{ fontSize: 15, color: '#ffb44d', fontFamily: "'JetBrains Mono', monospace", marginBottom: 22, lineHeight: 1.5 }}>
                   This is a last-resort bypass of the normal state machine. Funds go directly to whichever address you pick below — never anywhere else.
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#eafff5', cursor: 'pointer' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 22 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 16, color: '#eafff5', cursor: 'pointer' }}>
                     <input type="radio" checked={rescueRecipient === 'client'} onChange={() => setRescueRecipient('client')} />
                     client {truncate(rescueTarget.client)}
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#eafff5', cursor: 'pointer' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 16, color: '#eafff5', cursor: 'pointer' }}>
                     <input type="radio" checked={rescueRecipient === 'worker'} onChange={() => setRescueRecipient('worker')} />
                     worker {truncate(rescueTarget.worker)}
                   </label>
                 </div>
                 {rescueWriteError && (
-                  <div style={{ fontSize: 11, color: '#ff9a9a', marginBottom: 12 }}>
+                  <div style={{ fontSize: 15, color: '#ff9a9a', marginBottom: 16 }}>
                     {rescueWriteError.message.includes('User rejected') ? 'Transaction rejected in wallet' : 'Transaction failed, try again'}
                   </div>
                 )}
                 <button
                   disabled={!rescueRecipient}
                   onClick={handleConfirmRescue}
-                  style={{ width: '100%', background: rescueRecipient ? '#ff9a9a' : 'rgba(255,255,255,0.06)', color: rescueRecipient ? '#1a0606' : '#4a5550', border: 'none', padding: 11, borderRadius: 100, fontWeight: 700, fontSize: 13, cursor: rescueRecipient ? 'pointer' : 'not-allowed' }}
+                  style={{ width: '100%', background: rescueRecipient ? '#ff9a9a' : 'rgba(255,255,255,0.06)', color: rescueRecipient ? '#1a0606' : '#4a5550', border: 'none', padding: 15, borderRadius: 100, fontWeight: 700, fontSize: 17, cursor: rescueRecipient ? 'pointer' : 'not-allowed' }}
                 >
                   Confirm rescue
                 </button>

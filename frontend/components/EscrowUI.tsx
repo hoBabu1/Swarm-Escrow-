@@ -15,7 +15,7 @@ function StarRating({ rating }: { rating: number }) {
       {Array.from({ length: 5 }).map((_, i) => (
         <Star
           key={i}
-          size={13}
+          size={17}
           fill={i < filledCount ? '#ffd166' : 'none'}
           color={i < filledCount ? '#ffd166' : 'rgba(255,255,255,0.15)'}
           strokeWidth={1.5}
@@ -47,7 +47,7 @@ export const STATUS_COLORS: Record<string, [string, string]> = {
 export function StatusPill({ status }: { status: string }) {
   const [bg, color] = STATUS_COLORS[status] || STATUS_COLORS['Awaiting submission'];
   return (
-    <span style={{ background: bg, color, fontSize: 10, padding: '4px 10px', borderRadius: 100, fontFamily: "'JetBrains Mono', monospace" }}>
+    <span style={{ background: bg, color, fontSize: 13, padding: '5px 13px', borderRadius: 100, fontFamily: "'JetBrains Mono', monospace" }}>
       {status}
     </span>
   );
@@ -55,9 +55,9 @@ export function StatusPill({ status }: { status: string }) {
 
 export function StatCard({ label, value, accent }: { label: string; value: ReactNode; accent: string }) {
   return (
-    <div style={{ background: 'rgba(6,10,12,0.5)', border: `1px solid ${accent}`, borderRadius: 12, padding: 14 }}>
-      <div style={{ fontSize: 10, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 18, color: '#eafff5', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>{value}</div>
+    <div style={{ background: 'rgba(6,10,12,0.5)', border: `1px solid ${accent}`, borderRadius: 16, padding: 20 }}>
+      <div style={{ fontSize: 13, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", textTransform: 'uppercase', marginBottom: 8 }}>{label}</div>
+      <div style={{ fontSize: 24, color: '#eafff5', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>{value}</div>
     </div>
   );
 }
@@ -91,30 +91,30 @@ export function EscrowRowItem({
   const showCountdown = escrow.status === EscrowStatus.Created && now !== undefined;
 
   return (
-    <div onClick={onClick} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer', gap: 16 }}>
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+    <div onClick={onClick} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '19px 22px', borderBottom: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer', gap: 22 }}>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 14 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, color: '#eafff5', fontWeight: 500, marginBottom: 4 }}>Escrow #{escrow.id.toString()}</div>
-          <div style={{ fontSize: 11, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{counterpartyLabel}</div>
+          <div style={{ fontSize: 17, color: '#eafff5', fontWeight: 500, marginBottom: 5 }}>Escrow #{escrow.id.toString()}</div>
+          <div style={{ fontSize: 15, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{counterpartyLabel}</div>
         </div>
         {ratingReceived !== undefined && <StarRating rating={ratingReceived} />}
       </div>
       {showStepTracker && (
-        <div style={{ flexShrink: 0, margin: '0 8px' }}>
+        <div style={{ flexShrink: 0, margin: '0 11px' }}>
           <MiniStepTracker status={escrow.status} />
         </div>
       )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 22, flexShrink: 0 }}>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 13, color: '#eafff5', fontFamily: "'JetBrains Mono', monospace", marginBottom: 6 }}>{formatEther(escrow.amount)} BOT</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+          <div style={{ fontSize: 17, color: '#eafff5', fontFamily: "'JetBrains Mono', monospace", marginBottom: 8 }}>{formatEther(escrow.amount)} BOT</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11, justifyContent: 'flex-end' }}>
             {showCountdown && (
-              <span style={{ fontSize: 10, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace" }}>
+              <span style={{ fontSize: 13, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace" }}>
                 Ends in {formatCompactCountdown(Number(escrow.deadline) * 1000 - now!)}
               </span>
             )}
             {actionNeeded && (
-              <span style={{ background: 'rgba(255,180,77,0.15)', color: '#ffb44d', fontSize: 10, padding: '4px 10px', borderRadius: 100, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>
+              <span style={{ background: 'rgba(255,180,77,0.15)', color: '#ffb44d', fontSize: 13, padding: '5px 13px', borderRadius: 100, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>
                 Action needed
               </span>
             )}
