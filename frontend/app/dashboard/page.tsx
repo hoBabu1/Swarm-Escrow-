@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useAccount, useDisconnect, useWriteContract } from 'wagmi';
+import { useAccount, useWriteContract } from 'wagmi';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import type { ComponentType } from 'react';
@@ -18,7 +18,7 @@ import { useEscrowStats } from '@/lib/hooks/useEscrowStats';
 import { useAddressFeedback } from '@/lib/hooks/useAddressFeedback';
 import { TxLifecycleStatus } from '@/components/TxLifecycleStatus';
 import { StatCard, EscrowRowItem } from '@/components/EscrowUI';
-import { WalletBalance } from '@/components/WalletBalance';
+import { WalletButton } from '@/components/WalletButton';
 import { AdminNavLink } from '@/components/AdminNavLink';
 import { useTxLifecycle } from '@/lib/hooks/useTxLifecycle';
 import { truncate } from '@/lib/escrowFormat';
@@ -62,10 +62,8 @@ function validateCreateEscrowForm(form: CreateEscrowFormState) {
 export default function DashboardPage() {
   const router = useRouter();
   const { isConnected, address } = useAccount();
-  const { disconnect } = useDisconnect();
   const [tab, setTab] = useState<'client' | 'worker'>('client');
   const [search, setSearch] = useState('');
-  const [walletDD, setWalletDD] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
 
   const [now, setNow] = useState(Date.now());
@@ -222,13 +220,6 @@ export default function DashboardPage() {
   const allEscrowIds = useMemo(() => [...clientIds, ...workerIds], [clientIds, workerIds]);
   const rating = useAddressFeedback(address, allEscrowIds);
 
-  const truncatedAddr = address ? truncate(address) : '';
-
-  const handleDisconnect = () => {
-    setWalletDD(false);
-    disconnect();
-  };
-
   const goToEscrow = (id: bigint) => {
     router.push(`/escrow/${id.toString()}`);
   };
@@ -283,22 +274,7 @@ export default function DashboardPage() {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <AdminNavLink />
-            <WalletBalance />
-            <div style={{ position: 'relative' }}>
-            <button onClick={() => setWalletDD(!walletDD)} style={{ background: 'rgba(77,255,184,0.12)', color: '#4dffb8', border: '1px solid rgba(77,255,184,0.3)', padding: '8px 16px', borderRadius: 100, fontFamily: "'JetBrains Mono', monospace", fontSize: 12, cursor: 'pointer' }}>
-              {truncatedAddr}
-            </button>
-            {walletDD && (
-              <div style={{ position: 'absolute', right: 0, top: 40, background: 'rgba(10,16,14,0.95)', border: '1px solid rgba(77,255,184,0.3)', borderRadius: 10, padding: 6, minWidth: 150, zIndex: 20 }}>
-                <div onClick={() => { navigator.clipboard.writeText(address || ''); setWalletDD(false); }} style={{ padding: '9px 12px', fontSize: 12, color: '#eafff5', cursor: 'pointer', borderRadius: 6, fontFamily: "'JetBrains Mono', monospace" }}>
-                  Copy address
-                </div>
-                <div onClick={handleDisconnect} style={{ padding: '9px 12px', fontSize: 12, color: '#ff9a9a', cursor: 'pointer', borderRadius: 6 }}>
-                  Disconnect
-                </div>
-              </div>
-            )}
-            </div>
+            <WalletButton />
           </div>
         </div>
 

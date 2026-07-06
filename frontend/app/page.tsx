@@ -5,8 +5,7 @@ import { useAccount } from 'wagmi';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { useEffect, useRef, useState } from 'react';
 import { isAddress } from 'viem';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { WalletBalance } from '@/components/WalletBalance';
+import { WalletButton } from '@/components/WalletButton';
 import { AdminNavLink } from '@/components/AdminNavLink';
 
 const steps = [
@@ -75,8 +74,7 @@ export default function LandingPage() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <AdminNavLink />
-            <WalletBalance />
-            <ConnectButton showBalance={false} />
+            <WalletButton />
           </div>
         </div>
 

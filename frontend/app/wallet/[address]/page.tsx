@@ -10,6 +10,7 @@ import { useAddressFeedback } from '@/lib/hooks/useAddressFeedback';
 import { truncate, sameAddress } from '@/lib/escrowFormat';
 import { botChainTestnet } from '@/lib/chains';
 import { StatCard, EscrowRowItem } from '@/components/EscrowUI';
+import { WalletButton } from '@/components/WalletButton';
 
 const EXPLORER_BASE = botChainTestnet.blockExplorers.default.url;
 
@@ -68,16 +69,19 @@ export default function WalletLookupPage() {
           ← Back to landing
         </div>
 
-        <div onClick={() => router.push('/')} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 32, cursor: 'pointer' }}>
-          <svg width="26" height="26" viewBox="0 0 28 28">
-            <circle cx="14" cy="6" r="3.4" fill="#4dffb8" />
-            <circle cx="5" cy="21" r="3.4" fill="#4d9fff" />
-            <circle cx="23" cy="21" r="3.4" fill="#4dffb8" />
-            <line x1="14" y1="6" x2="5" y2="21" stroke="rgba(200,255,230,0.4)" strokeWidth="1.4" />
-            <line x1="14" y1="6" x2="23" y2="21" stroke="rgba(200,255,230,0.4)" strokeWidth="1.4" />
-            <line x1="5" y1="21" x2="23" y2="21" stroke="rgba(200,255,230,0.4)" strokeWidth="1.4" />
-          </svg>
-          <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 15, fontWeight: 700, color: '#eafff5' }}>Swarm Escrow</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 32 }}>
+          <div onClick={() => router.push('/')} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+            <svg width="26" height="26" viewBox="0 0 28 28">
+              <circle cx="14" cy="6" r="3.4" fill="#4dffb8" />
+              <circle cx="5" cy="21" r="3.4" fill="#4d9fff" />
+              <circle cx="23" cy="21" r="3.4" fill="#4dffb8" />
+              <line x1="14" y1="6" x2="5" y2="21" stroke="rgba(200,255,230,0.4)" strokeWidth="1.4" />
+              <line x1="14" y1="6" x2="23" y2="21" stroke="rgba(200,255,230,0.4)" strokeWidth="1.4" />
+              <line x1="5" y1="21" x2="23" y2="21" stroke="rgba(200,255,230,0.4)" strokeWidth="1.4" />
+            </svg>
+            <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 15, fontWeight: 700, color: '#eafff5' }}>Swarm Escrow</span>
+          </div>
+          <WalletButton />
         </div>
 
         <div style={{ marginBottom: 24 }}>

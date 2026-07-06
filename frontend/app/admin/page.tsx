@@ -13,6 +13,7 @@ import { useIsOwner } from '@/lib/hooks/useIsOwner';
 import { STATUS_LABELS, truncate } from '@/lib/escrowFormat';
 import { TxLifecycleStatus } from '@/components/TxLifecycleStatus';
 import { StatCard, StatusPill } from '@/components/EscrowUI';
+import { WalletButton } from '@/components/WalletButton';
 
 const EXPLORER_BASE = botChainTestnet.blockExplorers.default.url;
 
@@ -234,19 +235,22 @@ export default function AdminPage() {
   return (
     <div style={{ background: '#060a0c', position: 'relative', minHeight: '100vh', fontFamily: "'Sora', sans-serif" }}>
       <div style={{ position: 'relative', zIndex: 1, padding: '24px 32px', maxWidth: 800, margin: '0 auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <svg width="26" height="26" viewBox="0 0 28 28">
-            <circle cx="14" cy="6" r="3.4" fill="#4dffb8" />
-            <circle cx="5" cy="21" r="3.4" fill="#4d9fff" />
-            <circle cx="23" cy="21" r="3.4" fill="#4dffb8" />
-            <line x1="14" y1="6" x2="5" y2="21" stroke="rgba(200,255,230,0.4)" strokeWidth="1.4" />
-            <line x1="14" y1="6" x2="23" y2="21" stroke="rgba(200,255,230,0.4)" strokeWidth="1.4" />
-            <line x1="5" y1="21" x2="23" y2="21" stroke="rgba(200,255,230,0.4)" strokeWidth="1.4" />
-          </svg>
-          <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 15, fontWeight: 700, color: '#eafff5' }}>Swarm Escrow</span>
-          <span style={{ background: 'rgba(255,180,77,0.12)', color: '#ffb44d', fontSize: 10, padding: '4px 10px', borderRadius: 100, fontFamily: "'JetBrains Mono', monospace", marginLeft: 6 }}>
-            Admin only
-          </span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <svg width="26" height="26" viewBox="0 0 28 28">
+              <circle cx="14" cy="6" r="3.4" fill="#4dffb8" />
+              <circle cx="5" cy="21" r="3.4" fill="#4d9fff" />
+              <circle cx="23" cy="21" r="3.4" fill="#4dffb8" />
+              <line x1="14" y1="6" x2="5" y2="21" stroke="rgba(200,255,230,0.4)" strokeWidth="1.4" />
+              <line x1="14" y1="6" x2="23" y2="21" stroke="rgba(200,255,230,0.4)" strokeWidth="1.4" />
+              <line x1="5" y1="21" x2="23" y2="21" stroke="rgba(200,255,230,0.4)" strokeWidth="1.4" />
+            </svg>
+            <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 15, fontWeight: 700, color: '#eafff5' }}>Swarm Escrow</span>
+            <span style={{ background: 'rgba(255,180,77,0.12)', color: '#ffb44d', fontSize: 10, padding: '4px 10px', borderRadius: 100, fontFamily: "'JetBrains Mono', monospace", marginLeft: 6 }}>
+              Admin only
+            </span>
+          </div>
+          <WalletButton />
         </div>
         <div style={{ fontSize: 11, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", marginBottom: 20 }}>
           Connected as owner · {truncate(address || '')}

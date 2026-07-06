@@ -13,7 +13,7 @@ import { useTxLifecycle } from '@/lib/hooks/useTxLifecycle';
 import { STATUS_LABELS, truncate, sameAddress, isLikelyAlreadyHandledError } from '@/lib/escrowFormat';
 import { computeStepInfo, STEP_LABELS } from '@/lib/stepTracker';
 import { TxLifecycleStatus } from '@/components/TxLifecycleStatus';
-import { WalletBalance } from '@/components/WalletBalance';
+import { WalletButton } from '@/components/WalletButton';
 import { AdminNavLink } from '@/components/AdminNavLink';
 import { supabase } from '@/lib/supabase';
 
@@ -628,7 +628,7 @@ export default function EscrowDetailPage() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <AdminNavLink />
-            <WalletBalance />
+            <WalletButton />
           </div>
         </div>
 
