@@ -74,7 +74,10 @@ export function useEscrow(escrowId: string | bigint | undefined) {
     ...swarmEscrowConfig,
     functionName: "escrows",
     args: [isValid ? BigInt(escrowId) : BigInt(0)],
-    query: { enabled: isValid },
+    // The oracle can now change this escrow's status with no local wallet interaction at all
+    // (auto-resolve/finalize/timeout) — poll so the page catches that on its own instead of
+    // only updating after a wallet-triggered refetch.
+    query: { enabled: isValid, refetchInterval: 20_000 },
   });
 
   const parsed: ParsedEscrow | undefined = data ? parseEscrowTuple(data as unknown as EscrowStructTuple) : undefined;

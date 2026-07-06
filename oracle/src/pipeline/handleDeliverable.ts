@@ -6,6 +6,7 @@ import { fetchRepoAtCommit } from "../github/fetch.js";
 import { reviewerAgent, fraudSanityAgent, arbiterAgent } from "../agents/index.js";
 import type { AgentVerdict, DeliverableContext } from "../agents/base.js";
 import { submitAgentVerdict } from "../verdict/submit.js";
+import { tryAutoResolve } from "./autoResolve.js";
 import { logger } from "../lib/logger.js";
 import type { DeliverableSubmittedEvent } from "../contract/events.js";
 
@@ -67,6 +68,7 @@ export async function handleDeliverableSubmitted(event: DeliverableSubmittedEven
     const noArbiterNeeded = reviewerExisting.approved === fraudSanityExisting.approved;
     if (reviewerFraudSanityDone && (noArbiterNeeded || arbiterExisting.hasVoted)) {
       logger.info("deliverable_skip_already_complete", logCtx);
+      await tryAutoResolve(escrowId);
       return;
     }
 
@@ -137,6 +139,8 @@ export async function handleDeliverableSubmitted(event: DeliverableSubmittedEven
       await submitAgentVerdict(escrowId, AgentRole.Arbiter, arbiterVerdict);
       logger.info("agent_verdict_submitted", { ...logCtx, role: "arbiter", approved: arbiterVerdict.approved });
     }
+
+    await tryAutoResolve(escrowId);
 
     logger.info("deliverable_processing_complete", logCtx);
   } catch (err) {

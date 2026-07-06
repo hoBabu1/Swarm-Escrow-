@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { formatEther } from 'viem';
 import { EscrowWithId } from '@/lib/hooks/useEscrowsByIds';
 import { STATUS_LABELS } from '@/lib/escrowFormat';
+import { MiniStepTracker } from './MiniStepTracker';
 
 /** Shared status → (background, text) color pairs, used anywhere an escrow status renders
  * as a pill (dashboard, wallet lookup, admin). */
@@ -32,16 +33,31 @@ export function StatCard({ label, value, accent }: { label: string; value: React
   );
 }
 
-export function EscrowRowItem({ escrow, counterpartyLabel, onClick }: { escrow: EscrowWithId; counterpartyLabel: string; onClick: () => void }) {
+export function EscrowRowItem({
+  escrow,
+  counterpartyLabel,
+  onClick,
+  showStepTracker = false,
+}: {
+  escrow: EscrowWithId;
+  counterpartyLabel: string;
+  onClick: () => void;
+  /** Dashboard rows show a compact step tracker alongside the status pill; other callers
+   * (wallet lookup) keep the plain pill-only row. */
+  showStepTracker?: boolean;
+}) {
   return (
     <div onClick={onClick} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer' }}>
       <div>
         <div style={{ fontSize: 13, color: '#eafff5', fontWeight: 500, marginBottom: 4 }}>Escrow #{escrow.id.toString()}</div>
         <div style={{ fontSize: 11, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace" }}>{counterpartyLabel}</div>
       </div>
-      <div style={{ textAlign: 'right' }}>
-        <div style={{ fontSize: 13, color: '#eafff5', fontFamily: "'JetBrains Mono', monospace", marginBottom: 6 }}>{formatEther(escrow.amount)} BOT</div>
-        <StatusPill status={STATUS_LABELS[escrow.status]} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        {showStepTracker && <MiniStepTracker status={escrow.status} />}
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: 13, color: '#eafff5', fontFamily: "'JetBrains Mono', monospace", marginBottom: 6 }}>{formatEther(escrow.amount)} BOT</div>
+          <StatusPill status={STATUS_LABELS[escrow.status]} />
+        </div>
       </div>
     </div>
   );

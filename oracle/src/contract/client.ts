@@ -64,6 +64,10 @@ export interface SwarmEscrowMethods {
     approved: boolean,
     reasoningHash: string,
   ): Promise<ContractTransactionResponse>;
+  resolve(escrowId: bigint): Promise<ContractTransactionResponse>;
+  finalizeAfterChallengeWindow(escrowId: bigint): Promise<ContractTransactionResponse>;
+  resolveAfterSeniorArbiterTimeout(escrowId: bigint): Promise<ContractTransactionResponse>;
+  escrowCounter(): Promise<bigint>;
 }
 
 export const contract = rawContract as unknown as SwarmEscrowMethods;

@@ -3,15 +3,16 @@
 import { useAccount, useBlock, useReadContracts, useWriteContract } from 'wagmi';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import { isAddress } from 'viem';
+import { formatEther, isAddress } from 'viem';
 import { swarmEscrowConfig } from '@/lib/contract';
 import { botChainTestnet } from '@/lib/chains';
 import { EscrowStatus } from '@/lib/hooks/useEscrow';
 import { useEscrowsByIds, EscrowWithId } from '@/lib/hooks/useEscrowsByIds';
 import { useTxLifecycle } from '@/lib/hooks/useTxLifecycle';
-import { STATUS_LABELS, truncate, sameAddress } from '@/lib/escrowFormat';
+import { useIsOwner } from '@/lib/hooks/useIsOwner';
+import { STATUS_LABELS, truncate } from '@/lib/escrowFormat';
 import { TxLifecycleStatus } from '@/components/TxLifecycleStatus';
-import { StatusPill } from '@/components/EscrowUI';
+import { StatCard, StatusPill } from '@/components/EscrowUI';
 
 const EXPLORER_BASE = botChainTestnet.blockExplorers.default.url;
 
@@ -116,11 +117,16 @@ export default function AdminPage() {
   const { address, isConnected } = useAccount();
   const router = useRouter();
 
-  // All 6 of these are static/rarely-changing contract params — one multicall instead of
-  // six separate RPC round-trips.
+  // Ownership check lives in the shared useIsOwner hook (also used by AdminNavLink on every
+  // other page) so this gate and the nav link never drift out of sync with two separate
+  // `owner()` comparisons.
+  const { isOwner, owner, isLoading: ownerLoading, isError: ownerError } = useIsOwner();
+  const ownerResolved = !ownerLoading && !ownerError;
+
+  // The other 5 are static/rarely-changing contract params — one multicall instead of
+  // five separate RPC round-trips.
   const { data: adminReadsData, refetch: refetchAdminReads } = useReadContracts({
     contracts: [
-      { ...swarmEscrowConfig, functionName: 'owner' },
       { ...swarmEscrowConfig, functionName: 'escrowCounter' },
       { ...swarmEscrowConfig, functionName: 'challengeWindow' },
       { ...swarmEscrowConfig, functionName: 'seniorArbiterWindow' },
@@ -129,16 +135,11 @@ export default function AdminPage() {
     ],
   });
 
-  const ownerData = adminReadsData?.[0]?.status === 'success' ? adminReadsData[0].result : undefined;
-  const escrowCounterData = adminReadsData?.[1]?.status === 'success' ? adminReadsData[1].result : undefined;
-  const challengeWindowData = adminReadsData?.[2]?.status === 'success' ? adminReadsData[2].result : undefined;
-  const seniorArbiterWindowData = adminReadsData?.[3]?.status === 'success' ? adminReadsData[3].result : undefined;
-  const emergencyDelayData = adminReadsData?.[4]?.status === 'success' ? adminReadsData[4].result : undefined;
-  const oracleAddressData = adminReadsData?.[5]?.status === 'success' ? adminReadsData[5].result : undefined;
-
-  const owner = ownerData as `0x${string}` | undefined;
-  const ownerResolved = owner !== undefined;
-  const isOwner = ownerResolved && sameAddress(address, owner);
+  const escrowCounterData = adminReadsData?.[0]?.status === 'success' ? adminReadsData[0].result : undefined;
+  const challengeWindowData = adminReadsData?.[1]?.status === 'success' ? adminReadsData[1].result : undefined;
+  const seniorArbiterWindowData = adminReadsData?.[2]?.status === 'success' ? adminReadsData[2].result : undefined;
+  const emergencyDelayData = adminReadsData?.[3]?.status === 'success' ? adminReadsData[3].result : undefined;
+  const oracleAddressData = adminReadsData?.[4]?.status === 'success' ? adminReadsData[4].result : undefined;
 
   useEffect(() => {
     if (isConnected && ownerResolved && !isOwner) {
@@ -148,7 +149,14 @@ export default function AdminPage() {
 
   const escrowCount = escrowCounterData !== undefined ? Number(escrowCounterData as bigint) : 0;
   const allIds = useMemo(() => Array.from({ length: escrowCount }, (_, i) => BigInt(i)), [escrowCount]);
-  const { escrows, refetch: refetchEscrows } = useEscrowsByIds(allIds);
+  const { escrows, isLoading: escrowsLoading, isError: escrowsError, refetch: refetchEscrows } = useEscrowsByIds(allIds);
+
+  const activeEscrows = useMemo(
+    () => escrows.filter((e) => e.status !== EscrowStatus.Resolved && e.status !== EscrowStatus.Refunded),
+    [escrows],
+  );
+  const lockedAmount = useMemo(() => activeEscrows.reduce((sum, e) => sum + e.amount, BigInt(0)), [activeEscrows]);
+  const lockedCount = activeEscrows.length;
 
   // Rescue gating only needs a rough "has enough time passed" check, not live-block accuracy —
   // watching every new block here would be a steady stream of RPC calls for an admin-only,
@@ -172,6 +180,17 @@ export default function AdminPage() {
     return (
       <div style={{ background: '#060a0c', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Sora', sans-serif" }}>
         <p style={{ color: '#6a8f80', fontSize: 13 }}>Connect the owner wallet to access this page.</p>
+      </div>
+    );
+  }
+
+  // A failed owner() read must never redirect a genuine owner away — show a retry state
+  // instead of falling through to the "not owner" branch below.
+  if (ownerError) {
+    return (
+      <div style={{ background: '#060a0c', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, fontFamily: "'Sora', sans-serif" }}>
+        <p style={{ color: '#ff9a9a', fontSize: 13 }}>Couldn&apos;t verify owner access from the chain.</p>
+        <span onClick={() => window.location.reload()} style={{ color: '#4d9fff', fontSize: 12, cursor: 'pointer' }}>Retry</span>
       </div>
     );
   }
@@ -229,8 +248,24 @@ export default function AdminPage() {
             Admin only
           </span>
         </div>
-        <div style={{ fontSize: 11, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", marginBottom: 28 }}>
+        <div style={{ fontSize: 11, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", marginBottom: 20 }}>
           Connected as owner · {truncate(address || '')}
+        </div>
+
+        <div style={{ marginBottom: 28 }}>
+          {escrowsLoading ? (
+            <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 14, height: 62 }} />
+          ) : escrowsError ? (
+            <div style={{ padding: 14, textAlign: 'center', color: '#ff9a9a', fontSize: 12, background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(255,90,90,0.25)', borderRadius: 12 }}>
+              Couldn&apos;t load escrow totals from the chain. Try refreshing.
+            </div>
+          ) : (
+            <StatCard
+              label="Locked in contract"
+              value={`${formatEther(lockedAmount)} BOT locked across ${lockedCount} active escrows`}
+              accent="rgba(77,159,255,0.2)"
+            />
+          )}
         </div>
 
         <div style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", marginBottom: 12 }}>
@@ -267,7 +302,11 @@ export default function AdminPage() {
           All escrows · emergency rescue
         </div>
         <div style={{ background: 'rgba(6,10,12,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, overflow: 'hidden' }}>
-          {escrows.length === 0 ? (
+          {escrowsLoading ? (
+            <div style={{ padding: 24, textAlign: 'center', color: '#6a8f80', fontSize: 12 }}>Loading escrows...</div>
+          ) : escrowsError ? (
+            <div style={{ padding: 24, textAlign: 'center', color: '#ff9a9a', fontSize: 12 }}>Couldn&apos;t load escrows from the chain. Try refreshing.</div>
+          ) : escrows.length === 0 ? (
             <div style={{ padding: 24, textAlign: 'center', color: '#6a8f80', fontSize: 12 }}>No escrows yet.</div>
           ) : (
             escrows.map((e, i) => {
@@ -280,7 +319,7 @@ export default function AdminPage() {
                   <div>
                     <div style={{ fontSize: 13, color: '#eafff5', fontWeight: 500, marginBottom: 4 }}>Escrow #{e.id.toString()}</div>
                     <div style={{ fontSize: 11, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace" }}>
-                      {(Number(e.amount) / 1e18).toFixed(2)} BOT · client {truncate(e.client)} · worker {truncate(e.worker)}
+                      {Number(formatEther(e.amount)).toFixed(2)} BOT · client {truncate(e.client)} · worker {truncate(e.worker)}
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

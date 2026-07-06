@@ -17,6 +17,8 @@ import { useEscrowStats } from '@/lib/hooks/useEscrowStats';
 import { useAddressFeedback } from '@/lib/hooks/useAddressFeedback';
 import { TxLifecycleStatus } from '@/components/TxLifecycleStatus';
 import { StatCard, EscrowRowItem } from '@/components/EscrowUI';
+import { WalletBalance } from '@/components/WalletBalance';
+import { AdminNavLink } from '@/components/AdminNavLink';
 import { useTxLifecycle } from '@/lib/hooks/useTxLifecycle';
 import { truncate } from '@/lib/escrowFormat';
 
@@ -236,7 +238,10 @@ export default function DashboardPage() {
             <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 15, fontWeight: 700, color: '#eafff5' }}>Swarm Escrow</span>
           </div>
 
-          <div style={{ position: 'relative' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <AdminNavLink />
+            <WalletBalance />
+            <div style={{ position: 'relative' }}>
             <button onClick={() => setWalletDD(!walletDD)} style={{ background: 'rgba(77,255,184,0.12)', color: '#4dffb8', border: '1px solid rgba(77,255,184,0.3)', padding: '8px 16px', borderRadius: 100, fontFamily: "'JetBrains Mono', monospace", fontSize: 12, cursor: 'pointer' }}>
               {truncatedAddr}
             </button>
@@ -250,6 +255,7 @@ export default function DashboardPage() {
                 </div>
               </div>
             )}
+            </div>
           </div>
         </div>
 
@@ -321,6 +327,7 @@ export default function DashboardPage() {
                 escrow={escrow}
                 counterpartyLabel={tab === 'client' ? `worker ${truncate(escrow.worker)}` : `client ${truncate(escrow.client)}`}
                 onClick={() => goToEscrow(escrow.id)}
+                showStepTracker
               />
             ))
           )}

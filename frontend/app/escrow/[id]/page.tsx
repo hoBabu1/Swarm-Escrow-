@@ -6,12 +6,15 @@ import { useState, useEffect, useRef } from 'react';
 import { formatEther, keccak256, toBytes } from 'viem';
 import { swarmEscrowConfig } from '@/lib/contract';
 import { botChainTestnet } from '@/lib/chains';
-import { useEscrow, EscrowStatus, escrowExists } from '@/lib/hooks/useEscrow';
+import { useEscrow, EscrowStatus, escrowExists, parseEscrowTuple, type EscrowStructTuple } from '@/lib/hooks/useEscrow';
 import { useAgentVerdicts, AgentRoleName } from '@/lib/hooks/useAgentVerdicts';
 import { useHashVerifiedText } from '@/lib/hooks/useHashVerifiedText';
 import { useTxLifecycle } from '@/lib/hooks/useTxLifecycle';
-import { STATUS_LABELS, truncate, sameAddress } from '@/lib/escrowFormat';
+import { STATUS_LABELS, truncate, sameAddress, isLikelyAlreadyHandledError } from '@/lib/escrowFormat';
+import { computeStepInfo, STEP_LABELS } from '@/lib/stepTracker';
 import { TxLifecycleStatus } from '@/components/TxLifecycleStatus';
+import { WalletBalance } from '@/components/WalletBalance';
+import { AdminNavLink } from '@/components/AdminNavLink';
 
 const EXPLORER_BASE = botChainTestnet.blockExplorers.default.url;
 
@@ -23,29 +26,17 @@ function formatCountdown(ms: number) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-// Real contract states only — there is no distinct "Reviewed" status on-chain (agent votes
-// accumulate silently until resolve() tallies 2-of-3), so that step is folded into "Submitted".
-const STEPS: { status: EscrowStatus; label: string }[] = [
-  { status: EscrowStatus.Created, label: 'Created' },
-  { status: EscrowStatus.DeliverableSubmitted, label: 'Submitted' },
-  { status: EscrowStatus.PendingChallenge, label: 'Challenge' },
-  { status: EscrowStatus.Resolved, label: 'Resolved' },
-];
-
 function StepTracker({ status }: { status: EscrowStatus }) {
-  const isTerminal = status === EscrowStatus.Resolved || status === EscrowStatus.Refunded;
-  // Challenged is a sub-state of the Challenge step; Refunded is a terminal alternate of Resolved.
-  const effectiveStatus = status === EscrowStatus.Challenged ? EscrowStatus.PendingChallenge : status;
-  const currentIndex = isTerminal ? STEPS.length - 1 : STEPS.findIndex((s) => s.status === effectiveStatus);
+  const { currentIndex, isTerminal, labelOverride } = computeStepInfo(status);
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', marginBottom: 32 }}>
-      {STEPS.map((step, i) => {
+      {STEP_LABELS.map((stepLabel, i) => {
         const done = i < currentIndex || isTerminal;
         const current = i === currentIndex && !isTerminal;
-        const label = step.status === EscrowStatus.PendingChallenge && status === EscrowStatus.Challenged ? 'Challenged' : step.label;
+        const label = i === 2 && labelOverride ? labelOverride : stepLabel;
         return (
-          <div key={step.label} style={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : 'unset' }}>
+          <div key={stepLabel} style={{ display: 'flex', alignItems: 'center', flex: i < STEP_LABELS.length - 1 ? 1 : 'unset' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <div style={{
                 width: 22, height: 22, borderRadius: '50%',
@@ -60,7 +51,7 @@ function StepTracker({ status }: { status: EscrowStatus }) {
                 {label}
               </span>
             </div>
-            {i < STEPS.length - 1 && (
+            {i < STEP_LABELS.length - 1 && (
               <div style={{ flex: 1, height: 2, background: i < currentIndex ? '#4dffb8' : 'rgba(255,255,255,0.1)', marginBottom: 16, minWidth: 20 }} />
             )}
           </div>
@@ -210,12 +201,47 @@ export default function EscrowDetailPage() {
 
   const { writeContract: writeFinalize, data: finalizeTxHash, isPending: isFinalizeApproving, error: finalizeWriteError, reset: resetFinalizeWrite } = useWriteContract();
   const { txState: finalizeTxState, isConfirmed: isFinalizeConfirmed } = useTxLifecycle(finalizeTxHash, isFinalizeApproving);
+  const [finalizeRaceMessage, setFinalizeRaceMessage] = useState<string | null>(null);
+  const [isFinalizeSubmitting, setIsFinalizeSubmitting] = useState(false);
 
   useEffect(() => {
     if (isFinalizeConfirmed) {
       refetch();
     }
   }, [isFinalizeConfirmed, refetch]);
+
+  // resolve() is a public function — the oracle calls it automatically moments after the
+  // final agent vote lands, but any wallet can trigger it too (e.g. if the oracle is down).
+  const { writeContract: writeResolve, data: resolveTxHash, isPending: isResolveApproving, error: resolveWriteError, reset: resetResolveWrite } = useWriteContract();
+  const { txState: resolveTxState, isConfirmed: isResolveConfirmed } = useTxLifecycle(resolveTxHash, isResolveApproving);
+  const [resolveRaceMessage, setResolveRaceMessage] = useState<string | null>(null);
+  const [isResolveSubmitting, setIsResolveSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (isResolveConfirmed) {
+      refetch();
+      refetchVerdicts();
+    }
+  }, [isResolveConfirmed, refetch, refetchVerdicts]);
+
+  // Both write errors can carry a known "someone already handled this" revert reason (see
+  // isLikelyAlreadyHandledError) — surface that as a friendly message and refresh instead of
+  // the generic "Transaction failed" text, since this race is expected, not a bug.
+  useEffect(() => {
+    if (isLikelyAlreadyHandledError(resolveWriteError)) {
+      // A failed resolve() can't have changed any verdict, only the escrow's own status —
+      // no need to also re-run the verdicts multicall here.
+      setResolveRaceMessage('Already handled — refreshing latest status');
+      refetch();
+    }
+  }, [resolveWriteError, refetch]);
+
+  useEffect(() => {
+    if (isLikelyAlreadyHandledError(finalizeWriteError)) {
+      setFinalizeRaceMessage('Already handled — refreshing latest status');
+      refetch();
+    }
+  }, [finalizeWriteError, refetch]);
 
   // `now` needs to keep ticking through both PendingChallenge (countdown display) and
   // Challenged (no visible countdown yet, but we still need to detect the moment
@@ -307,6 +333,14 @@ export default function EscrowDetailPage() {
     escrowData.status === EscrowStatus.PendingChallenge && now > Number(escrowData.challengeDeadline) * 1000;
   const canFinalizeAfterSeniorArbiterTimeout =
     escrowData.status === EscrowStatus.Challenged && now > Number(escrowData.seniorArbiterDeadline) * 1000;
+
+  // resolve() has no caller restriction either — it just requires 2-of-3 agent consensus to
+  // exist. The oracle normally calls it within moments of the deciding vote; this is the
+  // manual fallback for anyone connected.
+  const approveVoteCount = verdicts.filter((v) => v.hasVoted && v.approved).length;
+  const rejectVoteCount = verdicts.filter((v) => v.hasVoted && !v.approved).length;
+  const consensusReached = approveVoteCount >= 2 || rejectVoteCount >= 2;
+  const canResolve = escrowData.status === EscrowStatus.DeliverableSubmitted && consensusReached;
 
   const isSpecLong = (specText.text ?? '').length > SPEC_LIMIT;
   const displaySpec = isSpecLong && !specExpanded ? `${(specText.text ?? '').slice(0, SPEC_LIMIT)}...` : specText.text;
@@ -463,12 +497,59 @@ export default function EscrowDetailPage() {
     }
   };
 
-  const handleFinalize = () => {
-    if (finalizeTxState !== 'idle' || escrowId === undefined) return;
-    if (canFinalizeAfterChallengeWindow) {
-      writeFinalize({ ...swarmEscrowConfig, functionName: 'finalizeAfterChallengeWindow', args: [escrowId] });
-    } else if (canFinalizeAfterSeniorArbiterTimeout) {
-      writeFinalize({ ...swarmEscrowConfig, functionName: 'resolveAfterSeniorArbiterTimeout', args: [escrowId] });
+  // Re-checks live status right before sending: the oracle (or another wallet) may have
+  // already finalized this escrow since the page last rendered. If so, skip the tx entirely
+  // rather than let it revert, and just refresh to the current state.
+  // `finalizeTxState !== 'idle'` alone doesn't guard against a double-click: it only flips
+  // away from 'idle' once writeFinalize is actually called, which is after the `await
+  // refetch()` below settles — a second click during that window would pass the same check.
+  // isFinalizeSubmitting is set synchronously at entry to close that window.
+  const handleFinalize = async () => {
+    if (isFinalizeSubmitting || finalizeTxState !== 'idle' || escrowId === undefined) return;
+    setIsFinalizeSubmitting(true);
+    setFinalizeRaceMessage(null);
+
+    try {
+      const fresh = await refetch();
+      const freshEscrow = fresh.data ? parseEscrowTuple(fresh.data as EscrowStructTuple) : escrowData;
+      const stillPendingChallenge =
+        freshEscrow.status === EscrowStatus.PendingChallenge && now > Number(freshEscrow.challengeDeadline) * 1000;
+      const stillChallenged =
+        freshEscrow.status === EscrowStatus.Challenged && now > Number(freshEscrow.seniorArbiterDeadline) * 1000;
+
+      if (!stillPendingChallenge && !stillChallenged) {
+        setFinalizeRaceMessage('This was already resolved — refreshing...');
+        return;
+      }
+
+      if (stillPendingChallenge) {
+        writeFinalize({ ...swarmEscrowConfig, functionName: 'finalizeAfterChallengeWindow', args: [escrowId] });
+      } else {
+        writeFinalize({ ...swarmEscrowConfig, functionName: 'resolveAfterSeniorArbiterTimeout', args: [escrowId] });
+      }
+    } finally {
+      setIsFinalizeSubmitting(false);
+    }
+  };
+
+  // Same race-safety pattern (and same reason for isResolveSubmitting) as handleFinalize above.
+  const handleResolve = async () => {
+    if (isResolveSubmitting || resolveTxState !== 'idle' || escrowId === undefined) return;
+    setIsResolveSubmitting(true);
+    setResolveRaceMessage(null);
+
+    try {
+      const fresh = await refetch();
+      const freshEscrow = fresh.data ? parseEscrowTuple(fresh.data as EscrowStructTuple) : escrowData;
+
+      if (freshEscrow.status !== EscrowStatus.DeliverableSubmitted) {
+        setResolveRaceMessage('This was already resolved — refreshing...');
+        return;
+      }
+
+      writeResolve({ ...swarmEscrowConfig, functionName: 'resolve', args: [escrowId] });
+    } finally {
+      setIsResolveSubmitting(false);
     }
   };
 
@@ -484,8 +565,14 @@ export default function EscrowDetailPage() {
   return (
     <div style={{ background: '#060a0c', position: 'relative', minHeight: '100vh', fontFamily: "'Sora', sans-serif" }}>
       <div style={{ position: 'relative', zIndex: 1, padding: '24px 32px', maxWidth: 720, margin: '0 auto' }}>
-        <div onClick={() => router.push('/dashboard')} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20, color: '#8fb5a8', fontSize: 12, cursor: 'pointer' }}>
-          ← Back to dashboard
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div onClick={() => router.push('/dashboard')} style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#8fb5a8', fontSize: 12, cursor: 'pointer' }}>
+            ← Back to dashboard
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <AdminNavLink />
+            <WalletBalance />
+          </div>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28, flexWrap: 'wrap', gap: 12 }}>
@@ -585,20 +672,9 @@ export default function EscrowDetailPage() {
 
         {escrowData.status === EscrowStatus.PendingChallenge && (
           <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(77,159,255,0.25)', borderRadius: 12, padding: 16, marginBottom: 32 }}>
-            <div style={{ fontSize: 12, color: '#eafff5', fontWeight: 500, marginBottom: 4 }}>Challenge window open</div>
-
-            <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', margin: '8px 0' }}>
-              {['HH', 'MM', 'SS'].map((unit, idx) => {
-                const parts = formatCountdown(countdownMs).split(':');
-                return (
-                  <div key={unit} style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 28, fontWeight: 700, color: '#4d9fff', background: 'rgba(77,159,255,0.08)', padding: '6px 12px', borderRadius: 8, minWidth: 52, textAlign: 'center', display: 'inline-block' }}>
-                      {parts[idx]}
-                    </span>
-                    {idx < 2 && <span style={{ color: '#4d9fff', fontSize: 20 }}>:</span>}
-                  </div>
-                );
-              })}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: 12, color: '#eafff5', fontWeight: 500 }}>Challenge window open</span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: '#4d9fff', fontWeight: 700 }}>{formatCountdown(countdownMs)}</span>
             </div>
 
             <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: canChallenge ? 12 : 0 }}>
@@ -613,6 +689,60 @@ export default function EscrowDetailPage() {
           </div>
         )}
 
+        {escrowData.status === EscrowStatus.Challenged && !canFinalizeAfterSeniorArbiterTimeout && (
+          <div style={{ background: 'rgba(255,180,77,0.08)', border: '1px solid rgba(255,180,77,0.3)', borderRadius: 12, padding: 16, marginBottom: 32 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontSize: 12, color: '#eafff5', fontWeight: 500 }}>Awaiting Senior Arbiter verdict</span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: '#4d9fff', fontWeight: 700 }}>
+                {formatCountdown(Number(escrowData.seniorArbiterDeadline) * 1000 - now)}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {canResolve && (
+          <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(77,159,255,0.25)', borderRadius: 12, padding: 16, marginBottom: 32 }}>
+            {resolveTxState === 'idle' ? (
+              <>
+                <div style={{ fontSize: 12, color: '#eafff5', fontWeight: 500, marginBottom: 4 }}>
+                  All agents have voted — ready to resolve
+                </div>
+                <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 12 }}>
+                  This usually happens automatically within moments — use this only if it&apos;s been a while. Anyone can trigger it.
+                </div>
+                {resolveRaceMessage && (
+                  <div style={{ fontSize: 11, color: '#4d9fff', marginBottom: 12 }}>{resolveRaceMessage}</div>
+                )}
+                {resolveWriteError && !isLikelyAlreadyHandledError(resolveWriteError) && (
+                  <div style={{ fontSize: 11, color: '#ff9a9a', marginBottom: 12 }}>
+                    {resolveWriteError.message.includes('User rejected') ? 'Transaction rejected in wallet' : 'Transaction failed, try again'}
+                  </div>
+                )}
+                <button
+                  onClick={handleResolve}
+                  disabled={isResolveSubmitting}
+                  style={{
+                    background: isResolveSubmitting ? 'rgba(77,159,255,0.3)' : '#4d9fff',
+                    color: '#03101f', border: 'none', padding: '10px 20px', borderRadius: 100, fontWeight: 700, fontSize: 13,
+                    cursor: isResolveSubmitting ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {isResolveSubmitting ? 'Checking status...' : 'Resolve escrow'}
+                </button>
+              </>
+            ) : (
+              <TxLifecycleStatus
+                txState={resolveTxState}
+                txHash={resolveTxHash}
+                explorerBase={EXPLORER_BASE}
+                confirmedLabel="Escrow resolved"
+                revertedLabel="No consensus was recorded."
+                onClose={() => { setResolveRaceMessage(null); resetResolveWrite(); }}
+              />
+            )}
+          </div>
+        )}
+
         {(canFinalizeAfterChallengeWindow || canFinalizeAfterSeniorArbiterTimeout) && (
           <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(77,255,184,0.25)', borderRadius: 12, padding: 16, marginBottom: 32 }}>
             {finalizeTxState === 'idle' ? (
@@ -621,15 +751,26 @@ export default function EscrowDetailPage() {
                   {canFinalizeAfterChallengeWindow ? 'Challenge window closed — ready to finalize' : 'Senior Arbiter response window closed — ready to finalize'}
                 </div>
                 <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 12 }}>
-                  Anyone can trigger this — funds don&apos;t move automatically once the window closes.
+                  This usually happens automatically within moments — use this only if it&apos;s been a while. Anyone can trigger it; funds don&apos;t move automatically once the window closes.
                 </div>
-                {finalizeWriteError && (
+                {finalizeRaceMessage && (
+                  <div style={{ fontSize: 11, color: '#4d9fff', marginBottom: 12 }}>{finalizeRaceMessage}</div>
+                )}
+                {finalizeWriteError && !isLikelyAlreadyHandledError(finalizeWriteError) && (
                   <div style={{ fontSize: 11, color: '#ff9a9a', marginBottom: 12 }}>
                     {finalizeWriteError.message.includes('User rejected') ? 'Transaction rejected in wallet' : 'Transaction failed, try again'}
                   </div>
                 )}
-                <button onClick={handleFinalize} style={{ background: '#4dffb8', color: '#06120c', border: 'none', padding: '10px 20px', borderRadius: 100, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  Finalize payout
+                <button
+                  onClick={handleFinalize}
+                  disabled={isFinalizeSubmitting}
+                  style={{
+                    background: isFinalizeSubmitting ? 'rgba(77,255,184,0.3)' : '#4dffb8',
+                    color: '#06120c', border: 'none', padding: '10px 20px', borderRadius: 100, fontWeight: 700, fontSize: 13,
+                    cursor: isFinalizeSubmitting ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {isFinalizeSubmitting ? 'Checking status...' : 'Finalize payout'}
                 </button>
               </>
             ) : (
@@ -639,7 +780,7 @@ export default function EscrowDetailPage() {
                 explorerBase={EXPLORER_BASE}
                 confirmedLabel="Escrow finalized"
                 revertedLabel="No funds were moved."
-                onClose={resetFinalizeWrite}
+                onClose={() => { setFinalizeRaceMessage(null); resetFinalizeWrite(); }}
               />
             )}
           </div>

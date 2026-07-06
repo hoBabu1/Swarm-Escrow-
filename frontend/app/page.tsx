@@ -6,6 +6,8 @@ import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { useEffect, useRef, useState } from 'react';
 import { isAddress } from 'viem';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { WalletBalance } from '@/components/WalletBalance';
+import { AdminNavLink } from '@/components/AdminNavLink';
 
 const steps = [
   ['01', 'Create escrow', 'Client funds the job with native BOT and sets terms.'],
@@ -71,7 +73,11 @@ export default function LandingPage() {
             </svg>
             <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 16, fontWeight: 700, color: '#eafff5' }}>Swarm Escrow</span>
           </div>
-          <ConnectButton />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <AdminNavLink />
+            <WalletBalance />
+            <ConnectButton />
+          </div>
         </div>
 
         <div style={{ textAlign: 'center', maxWidth: 520, margin: '0 auto 24px' }}>

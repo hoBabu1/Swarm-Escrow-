@@ -18,6 +18,13 @@ export default function WalletLookupPage() {
   const params = useParams();
   const address = (params.address as string) || '';
   const [tab, setTab] = useState<'client' | 'worker'>('worker');
+  const [lookupAddr, setLookupAddr] = useState('');
+  const lookupValid = lookupAddr.length > 0 && isAddress(lookupAddr);
+
+  const handleLookup = () => {
+    if (!lookupValid) return;
+    router.push(`/wallet/${lookupAddr}`);
+  };
 
   const validAddress = isAddress(address) ? (address as `0x${string}`) : undefined;
   const { data: clientIdsData, isLoading: clientIdsLoading, isError: clientIdsError } = useClientEscrows(validAddress);
@@ -57,6 +64,10 @@ export default function WalletLookupPage() {
   return (
     <div style={{ background: '#060a0c', position: 'relative', minHeight: '100vh', fontFamily: "'Sora', sans-serif" }}>
       <div style={{ position: 'relative', zIndex: 1, padding: '24px 32px', maxWidth: 720, margin: '0 auto' }}>
+        <div onClick={() => router.push('/')} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20, color: '#8fb5a8', fontSize: 12, cursor: 'pointer' }}>
+          ← Back to landing
+        </div>
+
         <div onClick={() => router.push('/')} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 32, cursor: 'pointer' }}>
           <svg width="26" height="26" viewBox="0 0 28 28">
             <circle cx="14" cy="6" r="3.4" fill="#4dffb8" />
@@ -81,6 +92,26 @@ export default function WalletLookupPage() {
           >
             {address} ↗
           </a>
+        </div>
+
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 8 }}>Look up another wallet</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              value={lookupAddr}
+              onChange={(e) => setLookupAddr(e.target.value)}
+              placeholder="0x..."
+              style={{ flex: 1, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '10px 12px', color: '#eafff5', fontFamily: "'JetBrains Mono', monospace", fontSize: 12, outline: 'none' }}
+            />
+            <button
+              disabled={!lookupValid}
+              onClick={handleLookup}
+              style={{ background: '#4d9fff', color: '#03101f', border: 'none', padding: '10px 18px', borderRadius: 8, fontWeight: 700, fontSize: 12, fontFamily: "'Sora', sans-serif", cursor: lookupValid ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap', opacity: lookupValid ? 1 : 0.5 }}
+            >
+              View history
+            </button>
+          </div>
+          {lookupAddr.length > 0 && !lookupValid && <p style={{ color: '#ff9a9a', fontSize: 11, marginTop: 8 }}>Enter a valid address</p>}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 24 }}>

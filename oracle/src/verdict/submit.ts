@@ -5,6 +5,7 @@ import { AgentRole } from "../contract/types.js";
 import { insertVerdict, getVerdicts, SupabaseRepositoryError, DUPLICATE_INSERT_CODE } from "../supabase/repository.js";
 import type { AgentRoleLabel } from "../supabase/types.js";
 import type { AgentVerdict } from "../agents/base.js";
+import { withTxLock } from "../lib/txMutex.js";
 
 const AGENT_ROLE_LABELS: Record<AgentRole, AgentRoleLabel> = {
   [AgentRole.Reviewer]: "reviewer",
@@ -98,14 +99,17 @@ export async function submitAgentVerdict(
     return { submittedOnChain: false };
   }
 
-  const tx = await contract.submitVerdict(escrowId, role, verdict.approved, reasoningHash);
-  const receipt = await tx.wait();
-  if (!receipt || receipt.status !== 1) {
-    throw new Error(`submitVerdict for escrow ${escrowId} role ${label} failed or reverted (tx: ${tx.hash})`);
-  }
+  const { hash: txHash } = await withTxLock(async () => {
+    const tx = await contract.submitVerdict(escrowId, role, verdict.approved, reasoningHash);
+    const receipt = await tx.wait();
+    if (!receipt || receipt.status !== 1) {
+      throw new Error(`submitVerdict for escrow ${escrowId} role ${label} failed or reverted (tx: ${tx.hash})`);
+    }
+    return tx;
+  });
 
   await ensureSupabaseRow(escrowId, label, verdict, reasoningHash);
-  return { submittedOnChain: true, txHash: tx.hash };
+  return { submittedOnChain: true, txHash };
 }
 
 export async function submitSeniorArbiterVerdict(escrowId: bigint, verdict: AgentVerdict): Promise<SubmitResult> {
@@ -125,12 +129,15 @@ export async function submitSeniorArbiterVerdict(escrowId: bigint, verdict: Agen
     return { submittedOnChain: false };
   }
 
-  const tx = await contract.submitSeniorArbiterVerdict(escrowId, verdict.approved, reasoningHash);
-  const receipt = await tx.wait();
-  if (!receipt || receipt.status !== 1) {
-    throw new Error(`submitSeniorArbiterVerdict for escrow ${escrowId} failed or reverted (tx: ${tx.hash})`);
-  }
+  const { hash: txHash } = await withTxLock(async () => {
+    const tx = await contract.submitSeniorArbiterVerdict(escrowId, verdict.approved, reasoningHash);
+    const receipt = await tx.wait();
+    if (!receipt || receipt.status !== 1) {
+      throw new Error(`submitSeniorArbiterVerdict for escrow ${escrowId} failed or reverted (tx: ${tx.hash})`);
+    }
+    return tx;
+  });
 
   await ensureSupabaseRow(escrowId, SENIOR_ARBITER_LABEL, verdict, reasoningHash);
-  return { submittedOnChain: true, txHash: tx.hash };
+  return { submittedOnChain: true, txHash };
 }
