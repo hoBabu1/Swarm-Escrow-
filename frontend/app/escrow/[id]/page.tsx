@@ -208,9 +208,19 @@ export default function EscrowDetailPage() {
     }
   }, [isFeedbackConfirmed, refetch]);
 
-  // Only the PendingChallenge countdown depends on `now` — avoid re-rendering the whole
-  // page every second (verdict cards, spec panel, hash-verification state, etc.) otherwise.
-  const isCountingDown = escrow?.status === EscrowStatus.PendingChallenge;
+  const { writeContract: writeFinalize, data: finalizeTxHash, isPending: isFinalizeApproving, error: finalizeWriteError, reset: resetFinalizeWrite } = useWriteContract();
+  const { txState: finalizeTxState, isConfirmed: isFinalizeConfirmed } = useTxLifecycle(finalizeTxHash, isFinalizeApproving);
+
+  useEffect(() => {
+    if (isFinalizeConfirmed) {
+      refetch();
+    }
+  }, [isFinalizeConfirmed, refetch]);
+
+  // `now` needs to keep ticking through both PendingChallenge (countdown display) and
+  // Challenged (no visible countdown yet, but we still need to detect the moment
+  // seniorArbiterDeadline passes so the finalize panel appears without a manual refresh).
+  const isCountingDown = escrow?.status === EscrowStatus.PendingChallenge || escrow?.status === EscrowStatus.Challenged;
   useEffect(() => {
     if (!isCountingDown) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -290,6 +300,13 @@ export default function EscrowDetailPage() {
   // so a past-deadline submission surfaces a clear message instead of a wallet-level revert.
   const isPastDeadline = now > Number(escrowData.deadline) * 1000;
   const alreadyLeftFeedback = (isClient && escrowData.hasClientFeedback) || (isWorker && escrowData.hasWorkerFeedback);
+
+  // Neither path has a caller restriction on-chain — anyone can trigger these once the
+  // relevant window has actually elapsed, since funds never move automatically on a timer.
+  const canFinalizeAfterChallengeWindow =
+    escrowData.status === EscrowStatus.PendingChallenge && now > Number(escrowData.challengeDeadline) * 1000;
+  const canFinalizeAfterSeniorArbiterTimeout =
+    escrowData.status === EscrowStatus.Challenged && now > Number(escrowData.seniorArbiterDeadline) * 1000;
 
   const isSpecLong = (specText.text ?? '').length > SPEC_LIMIT;
   const displaySpec = isSpecLong && !specExpanded ? `${(specText.text ?? '').slice(0, SPEC_LIMIT)}...` : specText.text;
@@ -446,6 +463,15 @@ export default function EscrowDetailPage() {
     }
   };
 
+  const handleFinalize = () => {
+    if (finalizeTxState !== 'idle' || escrowId === undefined) return;
+    if (canFinalizeAfterChallengeWindow) {
+      writeFinalize({ ...swarmEscrowConfig, functionName: 'finalizeAfterChallengeWindow', args: [escrowId] });
+    } else if (canFinalizeAfterSeniorArbiterTimeout) {
+      writeFinalize({ ...swarmEscrowConfig, functionName: 'resolveAfterSeniorArbiterTimeout', args: [escrowId] });
+    }
+  };
+
   const handleSubmitDeliverable = () => {
     if (!canSubmitDeliverable || escrowId === undefined) return;
     writeContract({
@@ -583,6 +609,38 @@ export default function EscrowDetailPage() {
               <button onClick={handleChallenge} style={{ background: 'transparent', color: '#ffb44d', border: '1px solid rgba(255,180,77,0.4)', padding: '9px 18px', borderRadius: 100, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 Raise challenge
               </button>
+            )}
+          </div>
+        )}
+
+        {(canFinalizeAfterChallengeWindow || canFinalizeAfterSeniorArbiterTimeout) && (
+          <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(77,255,184,0.25)', borderRadius: 12, padding: 16, marginBottom: 32 }}>
+            {finalizeTxState === 'idle' ? (
+              <>
+                <div style={{ fontSize: 12, color: '#eafff5', fontWeight: 500, marginBottom: 4 }}>
+                  {canFinalizeAfterChallengeWindow ? 'Challenge window closed — ready to finalize' : 'Senior Arbiter response window closed — ready to finalize'}
+                </div>
+                <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 12 }}>
+                  Anyone can trigger this — funds don&apos;t move automatically once the window closes.
+                </div>
+                {finalizeWriteError && (
+                  <div style={{ fontSize: 11, color: '#ff9a9a', marginBottom: 12 }}>
+                    {finalizeWriteError.message.includes('User rejected') ? 'Transaction rejected in wallet' : 'Transaction failed, try again'}
+                  </div>
+                )}
+                <button onClick={handleFinalize} style={{ background: '#4dffb8', color: '#06120c', border: 'none', padding: '10px 20px', borderRadius: 100, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  Finalize payout
+                </button>
+              </>
+            ) : (
+              <TxLifecycleStatus
+                txState={finalizeTxState}
+                txHash={finalizeTxHash}
+                explorerBase={EXPLORER_BASE}
+                confirmedLabel="Escrow finalized"
+                revertedLabel="No funds were moved."
+                onClose={resetFinalizeWrite}
+              />
             )}
           </div>
         )}
