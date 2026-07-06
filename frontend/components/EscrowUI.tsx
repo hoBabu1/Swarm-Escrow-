@@ -2,7 +2,16 @@ import { ReactNode } from 'react';
 import { formatEther } from 'viem';
 import { EscrowWithId } from '@/lib/hooks/useEscrowsByIds';
 import { STATUS_LABELS } from '@/lib/escrowFormat';
+import { EscrowStatus } from '@/lib/hooks/useEscrow';
 import { MiniStepTracker } from './MiniStepTracker';
+
+function formatCompactCountdown(ms: number) {
+  if (ms <= 0) return '00:00:00';
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
 
 /** Shared status → (background, text) color pairs, used anywhere an escrow status renders
  * as a pill (dashboard, wallet lookup, admin). */
@@ -38,6 +47,7 @@ export function EscrowRowItem({
   counterpartyLabel,
   onClick,
   showStepTracker = false,
+  now,
 }: {
   escrow: EscrowWithId;
   counterpartyLabel: string;
@@ -45,18 +55,30 @@ export function EscrowRowItem({
   /** Dashboard rows show a compact step tracker alongside the status pill; other callers
    * (wallet lookup) keep the plain pill-only row. */
   showStepTracker?: boolean;
+  /** Current time in ms, used to render the "Ends in" submission countdown for Created
+   * escrows. Only needed by callers that pass showStepTracker (the dashboard). */
+  now?: number;
 }) {
+  const showCountdown = escrow.status === EscrowStatus.Created && now !== undefined;
+
   return (
-    <div onClick={onClick} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer' }}>
-      <div>
+    <div onClick={onClick} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer', gap: 16 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, color: '#eafff5', fontWeight: 500, marginBottom: 4 }}>Escrow #{escrow.id.toString()}</div>
-        <div style={{ fontSize: 11, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace" }}>{counterpartyLabel}</div>
+        <div style={{ fontSize: 11, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{counterpartyLabel}</div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
         {showStepTracker && <MiniStepTracker status={escrow.status} />}
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: 13, color: '#eafff5', fontFamily: "'JetBrains Mono', monospace", marginBottom: 6 }}>{formatEther(escrow.amount)} BOT</div>
-          <StatusPill status={STATUS_LABELS[escrow.status]} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+            {showCountdown && (
+              <span style={{ fontSize: 10, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace" }}>
+                Ends in {formatCompactCountdown(Number(escrow.deadline) * 1000 - now!)}
+              </span>
+            )}
+            <StatusPill status={STATUS_LABELS[escrow.status]} />
+          </div>
         </div>
       </div>
     </div>

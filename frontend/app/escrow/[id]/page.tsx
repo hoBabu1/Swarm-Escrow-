@@ -15,6 +15,9 @@ import { computeStepInfo, STEP_LABELS } from '@/lib/stepTracker';
 import { TxLifecycleStatus } from '@/components/TxLifecycleStatus';
 import { WalletBalance } from '@/components/WalletBalance';
 import { AdminNavLink } from '@/components/AdminNavLink';
+import { supabase } from '@/lib/supabase';
+
+const RATING_PREFIX = /^(\d)\/5\s*(?:—|-)?\s*/;
 
 const EXPLORER_BASE = botChainTestnet.blockExplorers.default.url;
 
@@ -24,6 +27,25 @@ function formatCountdown(ms: number) {
   const m = Math.floor((ms % 3600000) / 60000);
   const s = Math.floor((ms % 60000) / 1000);
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function BigCountdown({ label, ms }: { label: string; ms: number }) {
+  const parts = formatCountdown(ms).split(':');
+  return (
+    <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(77,159,255,0.25)', borderRadius: 12, padding: 16, marginBottom: 24 }}>
+      <div style={{ fontSize: 12, color: '#eafff5', fontWeight: 500, marginBottom: 4 }}>{label}</div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', margin: '8px 0' }}>
+        {['HH', 'MM', 'SS'].map((unit, idx) => (
+          <div key={unit} style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 28, fontWeight: 700, color: '#4d9fff', background: 'rgba(77,159,255,0.08)', padding: '6px 12px', borderRadius: 8, minWidth: 52, textAlign: 'center', display: 'inline-block' }}>
+              {parts[idx]}
+            </span>
+            {idx < 2 && <span style={{ color: '#4d9fff', fontSize: 20 }}>:</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function StepTracker({ status }: { status: EscrowStatus }) {
@@ -163,6 +185,8 @@ export default function EscrowDetailPage() {
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [feedbackSubmitError, setFeedbackSubmitError] = useState<string | null>(null);
 
+  const [ownFeedback, setOwnFeedback] = useState<{ text: string; loading: boolean; error: string | null }>({ text: '', loading: false, error: null });
+
   const rawId = Array.isArray(params.id) ? params.id[0] : params.id;
   const isValidId = rawId !== undefined && /^\d+$/.test(rawId);
   const escrowId = isValidId ? BigInt(rawId) : undefined;
@@ -243,15 +267,48 @@ export default function EscrowDetailPage() {
     }
   }, [finalizeWriteError, refetch]);
 
-  // `now` needs to keep ticking through both PendingChallenge (countdown display) and
-  // Challenged (no visible countdown yet, but we still need to detect the moment
-  // seniorArbiterDeadline passes so the finalize panel appears without a manual refresh).
-  const isCountingDown = escrow?.status === EscrowStatus.PendingChallenge || escrow?.status === EscrowStatus.Challenged;
+  // `now` needs to keep ticking through Created (submission deadline countdown),
+  // PendingChallenge (countdown display) and Challenged (no visible countdown yet, but we
+  // still need to detect the moment seniorArbiterDeadline passes so the finalize panel
+  // appears without a manual refresh).
+  const isCountingDown =
+    escrow?.status === EscrowStatus.Created ||
+    escrow?.status === EscrowStatus.PendingChallenge ||
+    escrow?.status === EscrowStatus.Challenged;
   useEffect(() => {
     if (!isCountingDown) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [isCountingDown]);
+
+  const isTerminalStatus = escrow?.status === EscrowStatus.Resolved || escrow?.status === EscrowStatus.Refunded;
+  const isClientAddr = sameAddress(address, escrow?.client);
+  const isWorkerAddr = sameAddress(address, escrow?.worker);
+  const hasLeftOwnFeedback =
+    (isClientAddr && !!escrow?.hasClientFeedback) || (isWorkerAddr && !!escrow?.hasWorkerFeedback);
+
+  useEffect(() => {
+    if (!isTerminalStatus || !hasLeftOwnFeedback || !address || escrowId === undefined) return;
+    let cancelled = false;
+    setOwnFeedback({ text: '', loading: true, error: null });
+    (async () => {
+      const { data, error } = await supabase
+        .from('feedback_messages')
+        .select('message_text')
+        .eq('escrow_id', Number(escrowId))
+        .eq('sender_address', address)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        setOwnFeedback({ text: '', loading: false, error: "Couldn't load your feedback" });
+        return;
+      }
+      setOwnFeedback({ text: (data?.message_text as string) ?? '', loading: false, error: null });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isTerminalStatus, hasLeftOwnFeedback, address, escrowId]);
 
   const specText = useHashVerifiedText({
     table: 'escrow_specs',
@@ -589,6 +646,40 @@ export default function EscrowDetailPage() {
           </span>
         </div>
 
+        {escrowData.status === EscrowStatus.Created && (
+          <BigCountdown label="Submission ends in" ms={Number(escrowData.deadline) * 1000 - now} />
+        )}
+
+        {escrowData.status === EscrowStatus.PendingChallenge && (
+          <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(77,159,255,0.25)', borderRadius: 12, padding: 16, marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: 12, color: '#eafff5', fontWeight: 500 }}>Challenge window ends in</span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: '#4d9fff', fontWeight: 700 }}>{formatCountdown(countdownMs)}</span>
+            </div>
+
+            <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: canChallenge ? 12 : 0 }}>
+              tentative outcome: {escrowData.tentativeApproved ? 'worker paid' : 'client refunded'}
+            </div>
+
+            {canChallenge && (
+              <button onClick={handleChallenge} style={{ background: 'transparent', color: '#ffb44d', border: '1px solid rgba(255,180,77,0.4)', padding: '9px 18px', borderRadius: 100, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                Raise challenge
+              </button>
+            )}
+          </div>
+        )}
+
+        {escrowData.status === EscrowStatus.Challenged && !canFinalizeAfterSeniorArbiterTimeout && (
+          <div style={{ background: 'rgba(255,180,77,0.08)', border: '1px solid rgba(255,180,77,0.3)', borderRadius: 12, padding: 16, marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontSize: 12, color: '#eafff5', fontWeight: 500 }}>Senior Arbiter response ends in</span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: '#4d9fff', fontWeight: 700 }}>
+                {formatCountdown(Number(escrowData.seniorArbiterDeadline) * 1000 - now)}
+              </span>
+            </div>
+          </div>
+        )}
+
         <StepTracker status={escrowData.status} />
 
         <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16, marginBottom: 32 }}>
@@ -667,36 +758,6 @@ export default function EscrowDetailPage() {
             <button onClick={() => setModalOpen(true)} style={{ background: '#4dffb8', color: '#06120c', border: 'none', padding: '10px 20px', borderRadius: 100, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
               Submit deliverable
             </button>
-          </div>
-        )}
-
-        {escrowData.status === EscrowStatus.PendingChallenge && (
-          <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(77,159,255,0.25)', borderRadius: 12, padding: 16, marginBottom: 32 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: 12, color: '#eafff5', fontWeight: 500 }}>Challenge window open</span>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: '#4d9fff', fontWeight: 700 }}>{formatCountdown(countdownMs)}</span>
-            </div>
-
-            <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: canChallenge ? 12 : 0 }}>
-              tentative outcome: {escrowData.tentativeApproved ? 'worker paid' : 'client refunded'}
-            </div>
-
-            {canChallenge && (
-              <button onClick={handleChallenge} style={{ background: 'transparent', color: '#ffb44d', border: '1px solid rgba(255,180,77,0.4)', padding: '9px 18px', borderRadius: 100, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                Raise challenge
-              </button>
-            )}
-          </div>
-        )}
-
-        {escrowData.status === EscrowStatus.Challenged && !canFinalizeAfterSeniorArbiterTimeout && (
-          <div style={{ background: 'rgba(255,180,77,0.08)', border: '1px solid rgba(255,180,77,0.3)', borderRadius: 12, padding: 16, marginBottom: 32 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <span style={{ fontSize: 12, color: '#eafff5', fontWeight: 500 }}>Awaiting Senior Arbiter verdict</span>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: '#4d9fff', fontWeight: 700 }}>
-                {formatCountdown(Number(escrowData.seniorArbiterDeadline) * 1000 - now)}
-              </span>
-            </div>
           </div>
         )}
 
@@ -789,13 +850,40 @@ export default function EscrowDetailPage() {
         {(escrowData.status === EscrowStatus.Resolved || escrowData.status === EscrowStatus.Refunded) && (isClient || isWorker) && (
           <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(77,255,184,0.25)', borderRadius: 12, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
             <div style={{ fontSize: 12, color: '#eafff5', fontWeight: 500 }}>Escrow {escrowData.status === EscrowStatus.Resolved ? 'resolved' : 'refunded'}</div>
-            {alreadyLeftFeedback ? (
-              <span style={{ fontSize: 11, color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace" }}>Feedback already left</span>
-            ) : (
+            {!alreadyLeftFeedback && (
               <button onClick={handleLeaveFeedback} style={{ background: '#4dffb8', color: '#06120c', border: 'none', padding: '9px 18px', borderRadius: 100, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 Leave feedback
               </button>
             )}
+          </div>
+        )}
+
+        {alreadyLeftFeedback && (
+          <div style={{ background: 'rgba(6,10,12,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16, marginTop: 12 }}>
+            <div style={{ fontSize: 11, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 8, textTransform: 'uppercase' }}>
+              Your feedback
+            </div>
+            {ownFeedback.loading ? (
+              <p style={{ fontSize: 12, color: '#6a8f80', margin: 0 }}>Loading feedback...</p>
+            ) : ownFeedback.error ? (
+              <p style={{ fontSize: 12, color: '#ff9a9a', margin: 0 }}>{ownFeedback.error}</p>
+            ) : (() => {
+              const match = RATING_PREFIX.exec(ownFeedback.text);
+              const rating = match ? Number(match[1]) : null;
+              const message = match ? ownFeedback.text.slice(match[0].length) : ownFeedback.text;
+              return (
+                <>
+                  {rating !== null && (
+                    <div style={{ marginBottom: 8 }}>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <span key={n} style={{ fontSize: 16, color: n <= rating ? '#4dffb8' : '#3a4a44' }}>★</span>
+                      ))}
+                    </div>
+                  )}
+                  <p style={{ fontSize: 12, color: '#c4dcd0', margin: 0, lineHeight: 1.5 }}>{message || 'No message left'}</p>
+                </>
+              );
+            })()}
           </div>
         )}
 

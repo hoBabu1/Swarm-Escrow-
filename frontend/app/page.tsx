@@ -76,7 +76,7 @@ export default function LandingPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <AdminNavLink />
             <WalletBalance />
-            <ConnectButton />
+            <ConnectButton showBalance={false} />
           </div>
         </div>
 

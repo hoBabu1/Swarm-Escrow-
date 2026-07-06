@@ -13,6 +13,7 @@ import { SWARM_ESCROW_ABI } from '@/lib/abi';
 import { botChainTestnet } from '@/lib/chains';
 import { useClientEscrows, useWorkerEscrows } from '@/lib/hooks/useAddressEscrows';
 import { useEscrowsByIds } from '@/lib/hooks/useEscrowsByIds';
+import { EscrowStatus } from '@/lib/hooks/useEscrow';
 import { useEscrowStats } from '@/lib/hooks/useEscrowStats';
 import { useAddressFeedback } from '@/lib/hooks/useAddressFeedback';
 import { TxLifecycleStatus } from '@/components/TxLifecycleStatus';
@@ -67,6 +68,12 @@ export default function DashboardPage() {
   const [walletDD, setWalletDD] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
 
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
   const [form, setForm] = useState<CreateEscrowFormState>({ workerAddress: '', amount: '', specText: '' });
   const [touched, setTouched] = useState<TouchedState>({});
   const [deadlineDate, setDeadlineDate] = useState<Date | null>(null);
@@ -79,6 +86,26 @@ export default function DashboardPage() {
   // Recomputed each time the modal opens so "now" doesn't go stale across sessions,
   // but stable within a single open modal to avoid reallocating on every keystroke.
   const datePickerMinDate = useMemo(() => new Date(), [modalOpen]);
+
+  const isDeadlineDateToday =
+    deadlineDate !== null &&
+    deadlineDate.getFullYear() === datePickerMinDate.getFullYear() &&
+    deadlineDate.getMonth() === datePickerMinDate.getMonth() &&
+    deadlineDate.getDate() === datePickerMinDate.getDate();
+  // react-datepicker's minTime/maxTime only constrain the time-of-day *portion* of a date —
+  // when today is selected, minTime must be "now" so already-past slots on today are actually
+  // unselectable (minDate alone only blocks past calendar days, not past times within today).
+  const timeWindow = useMemo(() => {
+    if (isDeadlineDateToday) {
+      return { minTime: new Date(), maxTime: new Date(new Date().setHours(23, 59, 59, 999)) };
+    }
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+    return { minTime: startOfDay, maxTime: endOfDay };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-derive fresh "now" bounds whenever the selected day flips today <-> future
+  }, [isDeadlineDateToday]);
 
   const {
     data: clientIdsData,
@@ -173,8 +200,24 @@ export default function DashboardPage() {
     return activeEscrows.filter((e) => e.id.toString().includes(trimmed));
   }, [activeEscrows, search]);
 
+  const isTerminal = (status: EscrowStatus) => status === EscrowStatus.Resolved || status === EscrowStatus.Refunded;
+
+  const activeTabEscrows = useMemo(() => filteredData.filter((e) => !isTerminal(e.status)), [filteredData]);
+  const historyTabEscrows = useMemo(
+    () => filteredData.filter((e) => isTerminal(e.status)).sort((a, b) => (a.id > b.id ? -1 : a.id < b.id ? 1 : 0)),
+    [filteredData]
+  );
+
   const { totalEarned, totalPaidOut, activeCount } = useEscrowStats(clientEscrows, workerEscrows);
   const totalEscrowCount = clientIds.length + workerIds.length;
+
+  const lockedBot = useMemo(
+    () =>
+      [...clientEscrows, ...workerEscrows]
+        .filter((e) => !isTerminal(e.status))
+        .reduce((sum, e) => sum + e.amount, BigInt(0)),
+    [clientEscrows, workerEscrows]
+  );
 
   const allEscrowIds = useMemo(() => [...clientIds, ...workerIds], [clientIds, workerIds]);
   const rating = useAddressFeedback(address, allEscrowIds);
@@ -281,6 +324,7 @@ export default function DashboardPage() {
               <StatCard label="Total paid out" value={`${formatEther(totalPaidOut)} BOT`} accent="rgba(77,159,255,0.2)" />
               <StatCard label="Active escrows" value={String(activeCount)} accent="rgba(255,255,255,0.1)" />
               <StatCard label="Total escrows" value={String(totalEscrowCount)} accent="rgba(255,255,255,0.1)" />
+              <StatCard label="Your locked BOT" value={`${formatEther(lockedBot)} BOT`} accent="rgba(77,159,255,0.2)" />
               <StatCard
                 label="Rating"
                 value={rating.loading ? '...' : rating.count === 0 ? 'No ratings yet' : `${rating.average!.toFixed(1)} ★ (${rating.count})`}
@@ -321,15 +365,43 @@ export default function DashboardPage() {
           ) : filteredData.length === 0 ? (
             <div style={{ padding: 24, textAlign: 'center', color: '#6a8f80', fontSize: 12 }}>No escrows found.</div>
           ) : (
-            filteredData.map((escrow) => (
-              <EscrowRowItem
-                key={escrow.id.toString()}
-                escrow={escrow}
-                counterpartyLabel={tab === 'client' ? `worker ${truncate(escrow.worker)}` : `client ${truncate(escrow.client)}`}
-                onClick={() => goToEscrow(escrow.id)}
-                showStepTracker
-              />
-            ))
+            <>
+              <div style={{ padding: '10px 16px', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace" }}>
+                Active
+              </div>
+              {activeTabEscrows.length === 0 ? (
+                <div style={{ padding: '0 16px 16px', fontSize: 12, color: '#6a8f80' }}>No active escrows</div>
+              ) : (
+                activeTabEscrows.map((escrow) => (
+                  <EscrowRowItem
+                    key={escrow.id.toString()}
+                    escrow={escrow}
+                    counterpartyLabel={tab === 'client' ? `worker ${truncate(escrow.worker)}` : `client ${truncate(escrow.client)}`}
+                    onClick={() => goToEscrow(escrow.id)}
+                    showStepTracker
+                    now={now}
+                  />
+                ))
+              )}
+
+              <div style={{ padding: '10px 16px', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                History
+              </div>
+              {historyTabEscrows.length === 0 ? (
+                <div style={{ padding: '0 16px 16px', fontSize: 12, color: '#6a8f80' }}>No history yet</div>
+              ) : (
+                historyTabEscrows.map((escrow) => (
+                  <EscrowRowItem
+                    key={escrow.id.toString()}
+                    escrow={escrow}
+                    counterpartyLabel={tab === 'client' ? `worker ${truncate(escrow.worker)}` : `client ${truncate(escrow.client)}`}
+                    onClick={() => goToEscrow(escrow.id)}
+                    showStepTracker
+                    now={now}
+                  />
+                ))
+              )}
+            </>
           )}
         </div>
       </div>
@@ -384,6 +456,8 @@ export default function DashboardPage() {
                   timeIntervals={15}
                   dateFormat="MMM d, yyyy 'at' h:mm aa"
                   minDate={datePickerMinDate}
+                  minTime={timeWindow.minTime}
+                  maxTime={timeWindow.maxTime}
                   placeholderText="Select deadline date & time"
                   className={`swarm-datepicker-input${touched.deadline && !deadlineValid ? ' swarm-datepicker-input--error' : ''}`}
                   wrapperClassName="swarm-datepicker-wrapper"
