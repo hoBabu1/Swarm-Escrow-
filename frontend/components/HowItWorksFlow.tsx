@@ -2,7 +2,7 @@ export default function HowItWorksFlow() {
   return (
     <section className="w-full py-16">
       <h2 className="text-center text-2xl md:text-3xl font-bold text-[#eafff6] mb-10" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-        How it works
+        Working mechanism
       </h2>
       <div className="max-w-[680px] mx-auto">
         <svg width="100%" viewBox="0 0 680 1128" role="img" aria-labelledby="how-it-works-title how-it-works-desc">

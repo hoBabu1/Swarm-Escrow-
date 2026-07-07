@@ -109,14 +109,16 @@ export default function WalletLookupPage() {
 
         <div style={{ marginBottom: 34 }}>
           <div style={{ fontSize: 15, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 12 }}>Look up another wallet</div>
-          <div style={{ display: 'flex', gap: 12 }}>
+          <div className="wallet-lookup-row" style={{ display: 'flex', gap: 12 }}>
             <input
               value={lookupAddr}
               onChange={(e) => setLookupAddr(e.target.value)}
               placeholder="0x..."
-              style={{ flex: 1, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '14px 16px', color: '#eafff5', fontFamily: "'JetBrains Mono', monospace", fontSize: 15, outline: 'none' }}
+              className="wallet-lookup-input"
+              style={{ flex: 1, minWidth: 0, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '14px 16px', color: '#eafff5', fontFamily: "'JetBrains Mono', monospace", fontSize: 15, outline: 'none' }}
             />
             <button
+              className="wallet-lookup-button"
               disabled={!lookupValid}
               onClick={handleLookup}
               style={{ background: '#4d9fff', color: '#03101f', border: 'none', padding: '14px 24px', borderRadius: 10, fontWeight: 700, fontSize: 15, fontFamily: "'Sora', sans-serif", cursor: lookupValid ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap', opacity: lookupValid ? 1 : 0.5 }}
@@ -125,6 +127,13 @@ export default function WalletLookupPage() {
             </button>
           </div>
           {lookupAddr.length > 0 && !lookupValid && <p style={{ color: '#ff9a9a', fontSize: 14, marginTop: 12 }}>Enter a valid address</p>}
+          <style>{`
+            @media (max-width: 640px) {
+              .wallet-lookup-row { flex-direction: column; }
+              .wallet-lookup-input,
+              .wallet-lookup-button { width: 100%; box-sizing: border-box; }
+            }
+          `}</style>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 34 }}>

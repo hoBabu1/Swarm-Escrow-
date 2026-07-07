@@ -103,32 +103,38 @@ export default function LandingPage() {
             @media (max-width: 640px) {
               .hero-cta-row { flex-direction: column; }
               .hero-cta-btn { width: 100%; box-sizing: border-box; }
+              .wallet-lookup-row { flex-direction: column; }
+              .wallet-lookup-input,
+              .wallet-lookup-button { width: 100%; box-sizing: border-box; }
+              .wallet-quick-links { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
             }
           `}</style>
         </div>
 
-        <div style={{ maxWidth: 640, margin: '52px auto 0', background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(77,255,184,0.25)', borderRadius: 18, padding: 30, backdropFilter: 'blur(6px)' }}>
+        <div style={{ width: '100%', maxWidth: 640, boxSizing: 'border-box', margin: '52px auto 0', background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(77,255,184,0.25)', borderRadius: 18, padding: 30, backdropFilter: 'blur(6px)' }}>
           <div style={{ fontSize: 15, color: '#8fb5a8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 14 }}>Look up any wallet</div>
-          <div style={{ display: 'flex', gap: 12 }}>
+          <div className="wallet-lookup-row" style={{ display: 'flex', gap: 12 }}>
             <input
               value={lookupAddr}
               onChange={(e) => setLookupAddr(e.target.value)}
               placeholder="0x..."
-              style={{ flex: 1, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '14px 16px', color: '#eafff5', fontFamily: "'JetBrains Mono', monospace", fontSize: 15, outline: 'none' }}
+              className="wallet-lookup-input"
+              style={{ flex: 1, minWidth: 0, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '14px 16px', color: '#eafff5', fontFamily: "'JetBrains Mono', monospace", fontSize: 15, outline: 'none' }}
             />
-  <button
-    disabled={!addressValid || lookupAddr.length === 0}
-    onClick={() => router.push(`/wallet/${lookupAddr}`)}
-    style={{ background: '#4d9fff', color: '#03101f', border: 'none', padding: '14px 16px', borderRadius: 8, fontWeight: 700, fontSize: 15, fontFamily: "'Sora', sans-serif", cursor: 'pointer', whiteSpace: 'nowrap', opacity: !addressValid || lookupAddr.length === 0 ? 0.5 : 1 }}
-  >
-    View history
-  </button>
+            <button
+              className="wallet-lookup-button"
+              disabled={!addressValid || lookupAddr.length === 0}
+              onClick={() => router.push(`/wallet/${lookupAddr}`)}
+              style={{ background: '#4d9fff', color: '#03101f', border: 'none', padding: '14px 16px', borderRadius: 8, fontWeight: 700, fontSize: 15, fontFamily: "'Sora', sans-serif", cursor: 'pointer', whiteSpace: 'nowrap', opacity: !addressValid || lookupAddr.length === 0 ? 0.5 : 1 }}
+            >
+              View history
+            </button>
           </div>
           {!addressValid && <p style={{ color: '#ff9a9a', fontSize: 14, marginTop: 12 }}>Enter a valid address</p>}
-          <div style={{ marginTop: 14 }}>
+          <div className="wallet-quick-links" style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
             <button
               onClick={() => router.push(`/wallet/${TOPUSER_WALLET_ADDRESS}`)}
-              style={{ background: 'none', border: 'none', padding: 0, color: '#6a8f80', fontSize: 13, fontFamily: "'JetBrains Mono', monospace", cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3 }}
+              style={{ background: 'none', border: 'none', padding: 0, color: '#6a8f80', fontSize: 13, fontFamily: "'JetBrains Mono', monospace", cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3, whiteSpace: 'nowrap' }}
             >
               Check topuser →
             </button>
