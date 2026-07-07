@@ -234,8 +234,8 @@ export default function AdminPage() {
 
   return (
     <div style={{ background: '#060a0c', position: 'relative', minHeight: '100vh', fontFamily: "'Sora', sans-serif" }}>
-      <div style={{ position: 'relative', zIndex: 1, padding: '32px 48px', maxWidth: 1080, margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 22, marginBottom: 12 }}>
+      <div style={{ position: 'relative', zIndex: 1, padding: '24px 16px', maxWidth: 1080, margin: '0 auto' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <svg width="36" height="36" viewBox="0 0 28 28">
               <circle cx="14" cy="6" r="3.4" fill="#4dffb8" />
@@ -275,7 +275,7 @@ export default function AdminPage() {
         <div style={{ fontSize: 15, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", marginBottom: 16 }}>
           Contract parameters
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, marginBottom: 44 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 44 }}>
           <ParamField
             label="Challenge window (seconds)"
             fn="setChallengeWindow"
@@ -353,7 +353,7 @@ export default function AdminPage() {
 
       {rescueTarget && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
-          <div style={{ background: '#0a0f0d', border: '1px solid rgba(255,154,154,0.3)', borderRadius: 20, padding: 34, width: 500, maxWidth: '90%' }}>
+          <div style={{ background: '#0a0f0d', border: '1px solid rgba(255,154,154,0.3)', borderRadius: 20, padding: 34, width: 'min(500px, 90vw)', maxWidth: '90%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
               <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 21, color: '#eafff5', margin: 0 }}>Emergency rescue #{rescueTarget.id.toString()}</h2>
               {(rescueTxState === 'approve' || rescueTxState === 'confirming') ? (

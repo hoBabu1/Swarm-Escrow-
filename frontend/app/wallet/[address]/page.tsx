@@ -73,12 +73,12 @@ export default function WalletLookupPage() {
 
   return (
     <div style={{ background: '#060a0c', position: 'relative', minHeight: '100vh', fontFamily: "'Sora', sans-serif" }}>
-      <div style={{ position: 'relative', zIndex: 1, padding: '32px 48px', maxWidth: 960, margin: '0 auto' }}>
+      <div style={{ position: 'relative', zIndex: 1, padding: '24px 16px', maxWidth: 960, margin: '0 auto' }}>
         <div onClick={() => router.push('/')} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28, color: '#8fb5a8', fontSize: 16, cursor: 'pointer' }}>
           ← Back to landing
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 22, marginBottom: 44 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 44 }}>
           <div onClick={() => router.push('/')} style={{ display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer' }}>
             <svg width="37" height="37" viewBox="0 0 28 28">
               <circle cx="14" cy="6" r="3.4" fill="#4dffb8" />

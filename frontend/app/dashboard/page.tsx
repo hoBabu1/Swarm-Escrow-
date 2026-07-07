@@ -311,8 +311,8 @@ export default function DashboardPage() {
         <div style={{ position: 'absolute', width: 340, height: 340, borderRadius: '50%', top: -140, right: -100, background: 'radial-gradient(circle, rgba(77,159,255,0.12), transparent 70%)', filter: 'blur(30px)' }} />
       </div>
 
-      <div style={{ position: 'relative', zIndex: 1, padding: '32px 48px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 44 }}>
+      <div style={{ position: 'relative', zIndex: 1, padding: '24px 16px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 44 }}>
           <div onClick={() => router.push('/')} style={{ display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer' }}>
             <svg width="38" height="38" viewBox="0 0 28 28">
               <circle cx="14" cy="6" r="3.4" fill="#4dffb8" />
@@ -430,7 +430,7 @@ export default function DashboardPage() {
 
       {modalOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
-          <div style={{ background: '#0a0f0d', border: '1px solid rgba(77,255,184,0.25)', borderRadius: 22, padding: 34, width: 460, maxWidth: '90%' }}>
+          <div style={{ background: '#0a0f0d', border: '1px solid rgba(77,255,184,0.25)', borderRadius: 22, padding: 34, width: 'min(460px, 90vw)', maxWidth: '90%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 26 }}>
               <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, color: '#eafff5', margin: 0 }}>Create escrow</h2>
               {/* Disabled mid-flight: closing here would detach this component's tx-watching

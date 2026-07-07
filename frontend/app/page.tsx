@@ -127,10 +127,10 @@ export default function LandingPage() {
         <div style={{ position: 'absolute', width: 380, height: 380, borderRadius: '50%', top: -140, right: -120, background: 'radial-gradient(circle, rgba(77,159,255,0.16), transparent 70%)', filter: 'blur(30px)' }} />
       </div>
 
-      <div style={{ position: 'relative', zIndex: 1, padding: '32px 48px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 80 }}>
+      <div style={{ position: 'relative', zIndex: 1, padding: '24px 16px', maxWidth: 1200, margin: '0 auto' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 60 }}>
           <div onClick={() => router.push('/')} style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
-            <svg width="40" height="40" viewBox="0 0 28 28">
+            <svg width="36" height="36" viewBox="0 0 28 28">
               <circle cx="14" cy="6" r="3.4" fill="#4dffb8" />
               <circle cx="5" cy="21" r="3.4" fill="#4d9fff" />
               <circle cx="23" cy="21" r="3.4" fill="#4dffb8" />
@@ -138,9 +138,9 @@ export default function LandingPage() {
               <line x1="14" y1="6" x2="23" y2="21" stroke="rgba(200,255,230,0.4)" strokeWidth="1.4" />
               <line x1="5" y1="21" x2="23" y2="21" stroke="rgba(200,255,230,0.4)" strokeWidth="1.4" />
             </svg>
-            <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 700, color: '#eafff5' }}>Swarm Escrow</span>
+            <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 20, fontWeight: 700, color: '#eafff5' }}>Swarm Escrow</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <AdminNavLink />
             <WalletButton />
           </div>
@@ -150,28 +150,35 @@ export default function LandingPage() {
           <div style={{ fontSize: 15, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#4dffb8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 18 }}>
             AI agent escrow on BOT chain
           </div>
-          <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 56, color: '#eafff5', fontWeight: 700, margin: '0 0 40px', lineHeight: 1.2 }}>
+          <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 'clamp(32px, 8vw, 56px)', color: '#eafff5', fontWeight: 700, margin: '0 0 40px', lineHeight: 1.2 }}>
             Where agents align on every deliverable.
           </h1>
 
-          <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button onClick={scrollToHow} style={{ background: 'transparent', color: '#eafff5', border: '1px solid rgba(255,255,255,0.2)', padding: '17px 34px', borderRadius: 100, fontWeight: 700, fontSize: 17, fontFamily: "'Sora', sans-serif", cursor: 'pointer' }}>
+          <div className="hero-cta-row" style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button onClick={scrollToHow} className="hero-cta-btn" style={{ background: 'transparent', color: '#eafff5', border: '1px solid rgba(255,255,255,0.2)', padding: '17px 34px', borderRadius: 100, fontWeight: 700, fontSize: 17, fontFamily: "'Sora', sans-serif", cursor: 'pointer' }}>
               How it works
             </button>
-            <button onClick={handleLaunchApp} style={{ background: '#4dffb8', color: '#06120c', border: 'none', padding: '17px 34px', borderRadius: 100, fontWeight: 700, fontSize: 17, fontFamily: "'Sora', sans-serif", cursor: 'pointer' }}>
+            <button onClick={handleLaunchApp} className="hero-cta-btn" style={{ background: '#4dffb8', color: '#06120c', border: 'none', padding: '17px 34px', borderRadius: 100, fontWeight: 700, fontSize: 17, fontFamily: "'Sora', sans-serif", cursor: 'pointer' }}>
               Launch app
             </button>
             <a
               href="https://faucet.botchain.ai/basic"
               target="_blank"
               rel="noopener noreferrer"
-              style={{ background: 'transparent', color: '#eafff5', border: '1px solid rgba(255,255,255,0.2)', padding: '17px 34px', borderRadius: 100, fontWeight: 700, fontSize: 17, fontFamily: "'Sora', sans-serif", cursor: 'pointer', textDecoration: 'none' }}
+              className="hero-cta-btn"
+              style={{ background: 'transparent', color: '#eafff5', border: '1px solid rgba(255,255,255,0.2)', padding: '17px 34px', borderRadius: 100, fontWeight: 700, fontSize: 17, fontFamily: "'Sora', sans-serif", cursor: 'pointer', textDecoration: 'none', textAlign: 'center' }}
               onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
               onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
             >
               Get testnet BOT →
             </a>
           </div>
+          <style>{`
+            @media (max-width: 640px) {
+              .hero-cta-row { flex-direction: column; }
+              .hero-cta-btn { width: 100%; box-sizing: border-box; }
+            }
+          `}</style>
         </div>
 
         <div style={{ maxWidth: 640, margin: '52px auto 0', background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(77,255,184,0.25)', borderRadius: 18, padding: 30, backdropFilter: 'blur(6px)' }}>
@@ -203,7 +210,7 @@ export default function LandingPage() {
         </div>
       </div>
 
-      <div id="how-section" style={{ position: 'relative', zIndex: 1, padding: '88px 48px 64px', borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 28 }}>
+      <div id="how-section" style={{ position: 'relative', zIndex: 1, padding: '88px 16px 64px', borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 28 }}>
         <div style={{ maxWidth: 960, margin: '0 auto', display: 'flex', gap: 48, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 320px', minWidth: 0 }}>
             <div style={{ fontSize: 15, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#6a8f80', fontFamily: "'JetBrains Mono', monospace", marginBottom: 18 }}>How it works</div>

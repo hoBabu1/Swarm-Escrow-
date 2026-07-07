@@ -37,13 +37,13 @@ function BigCountdown({ label, ms }: { label: string; ms: number }) {
   return (
     <div style={{ background: 'rgba(6,10,12,0.5)', border: '1px solid rgba(77,159,255,0.25)', borderRadius: 16, padding: 22, marginBottom: 34 }}>
       <div style={{ fontSize: 16, color: '#eafff5', fontWeight: 500, marginBottom: 6 }}>{label}</div>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'baseline', margin: '12px 0' }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', margin: '12px 0', flexWrap: 'wrap' }}>
         {['HH', 'MM', 'SS'].map((unit, idx) => (
-          <div key={unit} style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 38, fontWeight: 700, color: '#4d9fff', background: 'rgba(77,159,255,0.08)', padding: '9px 18px', borderRadius: 10, minWidth: 70, textAlign: 'center', display: 'inline-block' }}>
+          <div key={unit} style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 'clamp(24px, 7vw, 38px)', fontWeight: 700, color: '#4d9fff', background: 'rgba(77,159,255,0.08)', padding: '9px 12px', borderRadius: 10, minWidth: 56, textAlign: 'center', display: 'inline-block' }}>
               {parts[idx]}
             </span>
-            {idx < 2 && <span style={{ color: '#4d9fff', fontSize: 26 }}>:</span>}
+            {idx < 2 && <span style={{ color: '#4d9fff', fontSize: 'clamp(18px, 5vw, 26px)' }}>:</span>}
           </div>
         ))}
       </div>
@@ -812,8 +812,8 @@ export default function EscrowDetailPage() {
 
   return (
     <div style={{ background: '#060a0c', position: 'relative', minHeight: '100vh', fontFamily: "'Sora', sans-serif" }}>
-      <div style={{ position: 'relative', zIndex: 1, padding: '32px 48px', maxWidth: 960, margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
+      <div style={{ position: 'relative', zIndex: 1, padding: '24px 16px', maxWidth: 960, margin: '0 auto' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 28 }}>
           <div onClick={() => router.push('/dashboard')} style={{ display: 'flex', alignItems: 'center', gap: 11, color: '#8fb5a8', fontSize: 15, cursor: 'pointer' }}>
             ← Back to dashboard
           </div>
@@ -938,7 +938,7 @@ export default function EscrowDetailPage() {
                   Couldn&apos;t read agent verdicts from the chain — the panel below may not reflect real votes yet. Try refreshing.
                 </div>
               )}
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cardCount}, 1fr)`, gap: 16, marginBottom: 44 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cardCount}, minmax(0, 1fr))`, gap: 16, marginBottom: 44 }}>
                 {verdicts.map((v, i) => (
                   <VerdictCard
                     key={v.agent}
