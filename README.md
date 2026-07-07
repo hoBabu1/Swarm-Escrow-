@@ -25,7 +25,7 @@ Swarm Escrow is a freelance/marketplace escrow contract where **three independen
 8. [Data & security model](#data--security-model)
 9. [Tech stack](#tech-stack)
 10. [Try it yourself — a full walkthrough](#try-it-yourself--a-full-walkthrough)
-11. [Known limitations & honest disclosures](#known-limitations--honest-disclosures)
+11. [Major changes to be seen in v2](#major-changes-to-be-seen-in-v2)
 12. [Deployed addresses](#deployed-addresses)
 13. [Repo structure](#repo-structure)
 
@@ -33,9 +33,13 @@ Swarm Escrow is a freelance/marketplace escrow contract where **three independen
 
 ## The problem
 
-Freelance/marketplace escrow today comes down to two bad options: a human arbiter (slow, expensive, subjective) or a single AI judge (fast, but a single point of failure and a single point of bias — one model's one-shot opinion decides whether you get paid).
+Getting paid as a freelancer is broken in three different ways:
 
-Swarm Escrow takes a third path: **treat deliverable review like a small jury**, not a single judge. Three differently-focused AI agents each independently evaluate the same submission, and the contract only acts when a majority (2-of-3) agrees — the same quorum principle used in multi-sig wallets, applied to subjective/qualitative review instead of just signatures.
+1. **Platform fees eat your earnings.** Web2 marketplaces take a 10–20% cut off every payment, just for hosting the listing — regardless of whether the work goes smoothly or not.
+2. **No real settlement guarantee.** Chargebacks, frozen accounts, and disputes decided by a support ticket mean "payment" on Web2 platforms is never actually final until a human agent says so.
+3. **No on-chain proof of work.** Neither client nor worker has a verifiable record that the deliverable was actually reviewed and judged fairly — even on-chain escrow designs typically settle this off-chain, through a human arbiter's private judgment, with nothing tamper-evident left behind.
+
+Swarm Escrow takes a third path: **treat deliverable review like a small jury**, not a single judge. Three differently-focused AI agents each independently evaluate the same submission, and the contract only acts when a majority (2-of-3) agrees — the same quorum principle used in multi-sig wallets, applied to subjective/qualitative review instead of just signatures. And because every verdict is hashed on-chain, the review itself becomes the missing proof of work.
 
 ---
 
@@ -171,7 +175,7 @@ A Node.js/TypeScript service that acts as the automated (but never exclusive) tr
 
 **Model:** Claude, via the Anthropic API. *(Development used a faster/cheaper model for iteration speed; production/demo runs on Claude Sonnet 5.)*
 
-**Resilience note:** every action the oracle auto-triggers is also manually triggerable by a human from the frontend — the oracle is a convenience layer, not a single point of failure for fund movement (see [Known limitations](#known-limitations--honest-disclosures) for the one exception).
+**Resilience note:** every action the oracle auto-triggers is also manually triggerable by a human from the frontend — the oracle is a convenience layer, not a single point of failure for fund movement.
 
 ---
 
@@ -263,15 +267,26 @@ This repo deliberately falls short of the spec (no case/punctuation handling, mi
 
 ---
 
-## Known limitations & honest disclosures
+## Major changes to be seen in v2
 
-We'd rather be upfront about these than have them discovered later:
+Swarm Escrow's current build proves the core idea — multi-agent, on-chain, quorum-based deliverable review — end-to-end on testnet. Two changes are already planned for v2, ahead of any real-value or mainnet use:
 
-1. **Oracle centralization.** A single oracle wallet currently submits all AI verdicts and triggers auto-resolution. If that wallet were compromised or acted maliciously, it could submit false verdicts (though it still can't move funds solo — 2-of-3 quorum and the challenge/Senior Arbiter path remain as checks). **To move toward decentralizing this**, our planned direction is a DVN-style model — similar to how cross-chain messaging protocols (e.g. LayerZero's Decentralized Verifier Networks) use multiple independent, permissionless verifiers instead of one trusted relayer. The long-term goal is multiple independent oracle operators each running their own agent instances, with on-chain agreement required across operators, not just across the three agent roles within one operator.
-2. **`emergencyRescue` is a genuine last resort, not a routine lever.** It's owner-only, can only ever send funds to that escrow's own client or worker, and is gated behind status-dependent deadlines plus an additional delay — but it is still an owner-privileged function, and we want that fact stated plainly rather than glossed over.
-3. **Oracle deploy script has the oracle address hardcoded** rather than read from an environment variable. Not a functional bug, but redeploying with a different oracle wallet currently requires editing the script directly rather than just changing a config value.
-4. **Public-repo-only scope.** The deliverable verification flow currently only supports public GitHub repositories pinned to a commit hash. Private repos (e.g. via a GitHub App with proper access) are explicitly out of scope for this submission.
-5. **Testnet only.** Everything described here — contract, oracle, frontend — is deployed and tested exclusively on BOT Chain testnet. No mainnet deployment exists at this time.
+### 1. DVN-style oracle network (decentralizing the oracle)
+
+Right now, a single oracle wallet runs all three agents and submits their verdicts on-chain. That wallet is not a single point of failure for *funds* — it still can't move money without 2-of-3 quorum, and the challenge/Senior Arbiter path exists specifically to catch a bad verdict — but it is a single point of failure for *evaluation*: one operator, one execution environment, one set of API keys.
+
+v2 replaces this with a **DVN-style model** — the same pattern cross-chain messaging protocols use (e.g. LayerZero's Decentralized Verifier Networks), where instead of one trusted relayer, multiple independent, permissionless verifiers each check the same thing and have to agree before anything is considered final. Applied here, that means:
+
+- **Multiple independent oracle operators**, each running their own instance of the Reviewer/FraudSanity/Arbiter agents, on their own infrastructure, with their own API keys — no shared execution environment or credentials across operators
+- **On-chain agreement required across operators**, not just across the three agent roles within a single operator — so the trust assumption moves from "one operator's three agents agree" to "N independent operators, each running three agents, agree with each other"
+- A path toward **permissionless operator participation** (with staking/slashing or a similar accountability mechanism) rather than a single hardcoded oracle address, so no one party — including the original builder — retains exclusive control over verdict submission
+- This directly compounds the existing 2-of-3 quorum design rather than replacing it: today's quorum is "3 agents, 1 operator"; v2's goal is "3 agents × N operators," decentralizing the layer that currently has the most concentrated trust
+
+### 2. Independent security audit
+
+The contract currently has Slither static analysis (clean, no High/Medium findings) and a Foundry test suite (83/83 passing — 72 unit, 9 fuzz at 256 runs, 2 invariant at 128k calls). That's a strong internal bar, but it's still one team checking its own work with automated and self-written tests.
+
+Before any mainnet deployment or handling of real value, v2 adds a **third-party security audit** — an external firm reviewing the contract specifically for the things automated tooling and internal tests are least likely to catch: economic/incentive attacks against the quorum and challenge mechanics, edge cases in the deadline/window state machine, and the owner-privileged `emergencyRescue` path in particular, given it's the one function in the system that can move funds outside the normal agent-verdict flow. This audit — not just "more internal tests" — is treated as a hard prerequisite for moving beyond testnet.
 
 ---
 
