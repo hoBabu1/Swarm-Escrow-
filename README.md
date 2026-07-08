@@ -7,9 +7,12 @@ Swarm Escrow is a freelance/marketplace escrow contract where **three independen
 - 🌐 **Live app:** [https://swarm-escrow.vercel.app/](https://swarm-escrow.vercel.app/)
 - 🐙 **Repo:** [https://github.com/hoBabu1/Swarm-Escrow-](https://github.com/hoBabu1/Swarm-Escrow-)
 - 🐦 **X:** [https://x.com/SwarmEscrow](https://x.com/SwarmEscrow) · builder: [https://x.com/thedhanyosmi](https://x.com/thedhanyosmi)
-- 🎥 **Demo video:** _[paste YouTube link here]_
+- 🎥 **Demo video:** [https://youtu.be/iULTOmTc1dA](https://youtu.be/iULTOmTc1dA)
+- 🧵 **Build journey thread:** [https://x.com/i/status/2074696729279201617](https://x.com/i/status/2074696729279201617)
 - 🏆 **Submission:** BOT Chain Builder Challenge #1 — **AI Agent track** (primary) + **Open track**
 - ⛓️ **Network:** BOT Chain **testnet only** (Chain ID 968)
+- 📄 **Contract address:** [`0xc45d948467Dd39278a456D4341C00C14F31300b2`](https://scan.bohr.life/address/0xc45d948467Dd39278a456D4341C00C14F31300b2)
+- 🔗 **Deploy tx:** [`0xd89b554d819f68e0c4cec052185e600dbe090d55e110b482212abaae6ebb467f`](https://scan.bohr.life/tx/0xd89b554d819f68e0c4cec052185e600dbe090d55e110b482212abaae6ebb467f)
 
 ---
 
@@ -37,9 +40,9 @@ Getting paid as a freelancer is broken in three different ways:
 
 1. **Platform fees eat your earnings.** Web2 marketplaces take a 10–20% cut off every payment, just for hosting the listing — regardless of whether the work goes smoothly or not.
 2. **No real settlement guarantee.** Chargebacks, frozen accounts, and disputes decided by a support ticket mean "payment" on Web2 platforms is never actually final until a human agent says so.
-3. **No on-chain proof of work.** Neither client nor worker has a verifiable record that the deliverable was actually reviewed and judged fairly — even on-chain escrow designs typically settle this off-chain, through a human arbiter's private judgment, with nothing tamper-evident left behind.
+3. **No on-chain proof of work.** A freelancer's completed jobs live and die inside one platform's private database. There's nothing portable to show a *new* client — no verifiable record of "I've done this kind of work before, and delivered it well." Even on-chain escrow designs usually settle quality off-chain, through a human arbiter's private judgment, leaving nothing tamper-evident behind for the next client to check.
 
-Swarm Escrow takes a third path: **treat deliverable review like a small jury**, not a single judge. Three differently-focused AI agents each independently evaluate the same submission, and the contract only acts when a majority (2-of-3) agrees — the same quorum principle used in multi-sig wallets, applied to subjective/qualitative review instead of just signatures. And because every verdict is hashed on-chain, the review itself becomes the missing proof of work.
+Swarm Escrow takes a third path: **treat deliverable review like a small jury**, not a single judge. Three differently-focused AI agents each independently evaluate the same submission, and the contract only acts when a majority (2-of-3) agrees — the same quorum principle used in multi-sig wallets, applied to subjective/qualitative review instead of just signatures. And because every verdict is hashed on-chain, each resolved escrow becomes a portable, verifiable proof of work — a freelancer can point any future client to their on-chain history instead of a rating buried inside someone else's platform.
 
 ---
 
@@ -296,8 +299,8 @@ Before any mainnet deployment or handling of real value, v2 adds a **third-party
 
 | | |
 |---|---|
-| Escrow contract | `0xc45d948467Dd39278a456D4341C00C14F31300b2` |
-| Deploy transaction | `0xd89b554d819f68e0c4cec052185e600dbe090d55e110b482212abaae6ebb467f` |
+| Escrow contract | [`0xc45d948467Dd39278a456D4341C00C14F31300b2`](https://scan.bohr.life/address/0xc45d948467Dd39278a456D4341C00C14F31300b2) |
+| Deploy transaction | [`0xd89b554d819f68e0c4cec052185e600dbe090d55e110b482212abaae6ebb467f`](https://scan.bohr.life/tx/0xd89b554d819f68e0c4cec052185e600dbe090d55e110b482212abaae6ebb467f) |
 | Explorer | [scan.bohr.life](https://scan.bohr.life/) |
 
 ---
@@ -321,4 +324,5 @@ Swarm-Escrow-/
 - **Repo:** https://github.com/hoBabu1/Swarm-Escrow-
 - **X:** https://x.com/SwarmEscrow
 - **Builder:** [@thedhanyosmi](https://x.com/thedhanyosmi) — solo build
-- **Demo video:** _[paste YouTube link here]_
+- **Demo video:** https://youtu.be/iULTOmTc1dA
+- **Build journey thread:** https://x.com/i/status/2074696729279201617
