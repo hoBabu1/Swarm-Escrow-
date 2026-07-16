@@ -30,7 +30,7 @@ export function useAgentVerdicts(escrowId: bigint | undefined) {
       { ...swarmEscrowConfig, functionName: "verdicts", args: [escrowId ?? BigInt(0), BigInt(2)] },
       { ...swarmEscrowConfig, functionName: "seniorArbiterVotes", args: [escrowId ?? BigInt(0)] },
     ],
-    query: { enabled },
+    query: { enabled, refetchInterval: 20_000 },
   });
 
   const verdicts: OnChainVerdict[] = AGENT_ROLES.map((agent, i) => {
