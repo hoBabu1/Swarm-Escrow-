@@ -19,7 +19,8 @@ if (dotenvResult.error) {
 interface OracleEnv {
   ORACLE_PRIVATE_KEY: string;
   ANTHROPIC_API_KEY: string;
-  RPC_URL_TESTNET: string;
+  RPC_URL: string;
+  CHAIN_ID: number;
   CONTRACT_ADDRESS: string;
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
@@ -46,7 +47,8 @@ function validate(): OracleEnv {
   const required = [
     "ORACLE_PRIVATE_KEY",
     "ANTHROPIC_API_KEY",
-    "RPC_URL_TESTNET",
+    "RPC_URL",
+    "CHAIN_ID",
     "CONTRACT_ADDRESS",
     "SUPABASE_URL",
     "SUPABASE_SERVICE_ROLE_KEY",
@@ -63,8 +65,20 @@ function validate(): OracleEnv {
     errors.push("ORACLE_PRIVATE_KEY must be a 0x-prefixed 32-byte hex string.");
   }
 
-  if (raw.RPC_URL_TESTNET && !isValidUrl(raw.RPC_URL_TESTNET)) {
-    errors.push("RPC_URL_TESTNET must be a valid URL.");
+  if (raw.RPC_URL && !isValidUrl(raw.RPC_URL)) {
+    errors.push("RPC_URL must be a valid URL.");
+  }
+
+  // Must match the chain RPC_URL actually points to — this is what tags every
+  // Supabase row written by this process (verdicts/specs/challenge docs/
+  // feedback), so a mismatch would silently misattribute rows to the wrong
+  // network rather than fail loudly.
+  let chainId = NaN;
+  if (raw.CHAIN_ID) {
+    chainId = Number(raw.CHAIN_ID);
+    if (!Number.isInteger(chainId) || chainId <= 0) {
+      errors.push("CHAIN_ID must be a positive integer.");
+    }
   }
 
   if (raw.CONTRACT_ADDRESS && !isAddress(raw.CONTRACT_ADDRESS)) {
@@ -100,7 +114,8 @@ function validate(): OracleEnv {
   return {
     ORACLE_PRIVATE_KEY: raw.ORACLE_PRIVATE_KEY!,
     ANTHROPIC_API_KEY: raw.ANTHROPIC_API_KEY!,
-    RPC_URL_TESTNET: raw.RPC_URL_TESTNET!,
+    RPC_URL: raw.RPC_URL!,
+    CHAIN_ID: chainId,
     CONTRACT_ADDRESS: raw.CONTRACT_ADDRESS!,
     SUPABASE_URL: raw.SUPABASE_URL!,
     SUPABASE_SERVICE_ROLE_KEY: raw.SUPABASE_SERVICE_ROLE_KEY!,

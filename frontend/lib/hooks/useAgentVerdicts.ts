@@ -1,5 +1,5 @@
 import { useReadContracts } from "wagmi";
-import { swarmEscrowConfig } from "../contract";
+import { useSwarmEscrowConfig } from "../contract";
 import { ZERO_HASH } from "./useEscrow";
 
 export const AGENT_ROLES = ["Reviewer", "FraudSanity", "Arbiter"] as const;
@@ -21,6 +21,7 @@ export interface OnChainSeniorArbiterVote {
 /** Reads all 3 agent-role verdicts plus the Senior Arbiter vote for one escrow in a single multicall. */
 export function useAgentVerdicts(escrowId: bigint | undefined) {
   const enabled = escrowId !== undefined;
+  const swarmEscrowConfig = useSwarmEscrowConfig();
 
   const { data, isLoading, isError, error, refetch } = useReadContracts({
     contracts: [

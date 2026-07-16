@@ -1,5 +1,5 @@
 import { useAccount, useReadContract } from "wagmi";
-import { swarmEscrowConfig } from "../contract";
+import { useSwarmEscrowConfig } from "../contract";
 import { sameAddress } from "../escrowFormat";
 
 /** Single shared "is this wallet the contract owner" check (one `owner()` read + a
@@ -7,6 +7,7 @@ import { sameAddress } from "../escrowFormat";
  * own access gate, so ownership logic never gets duplicated or hardcoded per page. */
 export function useIsOwner() {
   const { address, isConnected } = useAccount();
+  const swarmEscrowConfig = useSwarmEscrowConfig();
   // Gated on isConnected: AdminNavLink renders this hook unconditionally on every page
   // (landing included), so without this guard every disconnected visitor would fire an
   // owner() read that can never resolve to true anyway.

@@ -8,8 +8,11 @@ import { isAddress } from 'viem';
 import { WalletButton } from '@/components/WalletButton';
 import { AdminNavLink } from '@/components/AdminNavLink';
 import HowItWorksFlow from '@/components/HowItWorksFlow';
+import { botChainMainnet } from '@/lib/chains';
 
 const TOPUSER_WALLET_ADDRESS = '0x096DD3EBFab85c85309477DDf3A18FC31ecBa33a';
+const MAINNET_CONTRACT_ADDRESS = '0xc45d948467Dd39278a456D4341C00C14F31300b2';
+const MAINNET_CONTRACT_URL = `${botChainMainnet.blockExplorers.default.url}/address/${MAINNET_CONTRACT_ADDRESS}`;
 
 export default function LandingPage() {
   const router = useRouter();
@@ -76,6 +79,12 @@ export default function LandingPage() {
           <div style={{ fontSize: 15, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#4dffb8', fontFamily: "'JetBrains Mono', monospace", marginBottom: 18 }}>
             AI agent escrow on BOT chain
           </div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(77,255,184,0.12)', border: '1px solid rgba(77,255,184,0.3)', borderRadius: 100, padding: '7px 16px', fontSize: 13, fontWeight: 700, color: '#4dffb8', fontFamily: "'JetBrains Mono', monospace" }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#4dffb8', boxShadow: '0 0 8px #4dffb8' }} />
+              Live on BOT Chain Mainnet
+            </span>
+          </div>
           <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 'clamp(32px, 8vw, 56px)', color: '#eafff5', fontWeight: 700, margin: '0 0 40px', lineHeight: 1.2 }}>
             Where agents align on every deliverable.
           </h1>
@@ -97,6 +106,17 @@ export default function LandingPage() {
               onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
             >
               Get testnet BOT →
+            </a>
+            <a
+              href={MAINNET_CONTRACT_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hero-cta-btn"
+              style={{ background: 'transparent', color: '#eafff5', border: '1px solid rgba(255,255,255,0.2)', padding: '17px 34px', borderRadius: 100, fontWeight: 700, fontSize: 17, fontFamily: "'Sora', sans-serif", cursor: 'pointer', textDecoration: 'none', textAlign: 'center' }}
+              onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
+              onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
+            >
+              View mainnet contract ↗
             </a>
           </div>
           <style>{`

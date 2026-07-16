@@ -1,12 +1,13 @@
 import { useMemo } from "react";
 import { useReadContracts } from "wagmi";
-import { swarmEscrowConfig } from "../contract";
+import { useSwarmEscrowConfig } from "../contract";
 import { EscrowStructTuple, ParsedEscrow, parseEscrowTuple } from "./useEscrow";
 
 export type EscrowWithId = ParsedEscrow & { id: bigint };
 
 /** Batches individual `escrows(id)` reads into a single multicall instead of one RPC round-trip per row. */
-export function useEscrowsByIds(ids: readonly bigint[] | undefined) {
+export function useEscrowsByIds(ids: readonly bigint[] | undefined, chainIdOverride?: number) {
+  const swarmEscrowConfig = useSwarmEscrowConfig(chainIdOverride);
   // Keyed on the ids' own values (not array identity) so a fresh `[]`/undefined on every
   // render from the caller doesn't force useReadContracts to rebuild its contracts list.
   const idsKey = ids?.join(",") ?? "";
@@ -17,8 +18,8 @@ export function useEscrowsByIds(ids: readonly bigint[] | undefined) {
         functionName: "escrows",
         args: [id],
       })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- idsKey is the real dependency, ids is derived from it
-    [idsKey]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- idsKey/swarmEscrowConfig.address are the real deps, ids is derived from idsKey
+    [idsKey, swarmEscrowConfig.address]
   );
 
   const { data, isLoading, isError, error, refetch } = useReadContracts({

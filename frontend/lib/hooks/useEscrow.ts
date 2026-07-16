@@ -1,5 +1,5 @@
 import { useReadContract } from "wagmi";
-import { swarmEscrowConfig } from "../contract";
+import { useSwarmEscrowConfig } from "../contract";
 
 export enum EscrowStatus {
   Created = 0,
@@ -69,6 +69,7 @@ export function parseEscrowTuple(data: EscrowStructTuple): ParsedEscrow {
 
 export function useEscrow(escrowId: string | bigint | undefined) {
   const isValid = escrowId !== undefined && !Number.isNaN(Number(escrowId));
+  const swarmEscrowConfig = useSwarmEscrowConfig();
 
   const { data, isLoading, isError, error, refetch } = useReadContract({
     ...swarmEscrowConfig,

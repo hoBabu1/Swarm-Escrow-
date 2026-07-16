@@ -10,9 +10,10 @@ Swarm Escrow is a freelance/marketplace escrow contract where **three independen
 - 🎥 **Demo video:** [https://youtu.be/iULTOmTc1dA](https://youtu.be/iULTOmTc1dA)
 - 🧵 **Build journey thread:** [https://x.com/i/status/2074696729279201617](https://x.com/i/status/2074696729279201617)
 - 🏆 **Submission:** BOT Chain Builder Challenge #1 — **AI Agent track** (primary) + **Open track**
-- ⛓️ **Network:** BOT Chain **testnet only** (Chain ID 968)
-- 📄 **Contract address:** [`0xc45d948467Dd39278a456D4341C00C14F31300b2`](https://scan.bohr.life/address/0xc45d948467Dd39278a456D4341C00C14F31300b2)
-- 🔗 **Deploy tx:** [`0xd89b554d819f68e0c4cec052185e600dbe090d55e110b482212abaae6ebb467f`](https://scan.bohr.life/tx/0xd89b554d819f68e0c4cec052185e600dbe090d55e110b482212abaae6ebb467f)
+- ⛓️ **Network:** BOT Chain **testnet + mainnet**, both live in parallel (Chain ID 968 / 677)
+- 📄 **Testnet contract:** [`0xc45d948467Dd39278a456D4341C00C14F31300b2`](https://scan.bohr.life/address/0xc45d948467Dd39278a456D4341C00C14F31300b2) · **Deploy tx:** [`0xd89b554d819f68e0c4cec052185e600dbe090d55e110b482212abaae6ebb467f`](https://scan.bohr.life/tx/0xd89b554d819f68e0c4cec052185e600dbe090d55e110b482212abaae6ebb467f)
+- 📄 **Mainnet contract:** [`0xc45d948467Dd39278a456D4341C00C14F31300b2`](https://scan.botchain.ai/address/0xc45d948467Dd39278a456D4341C00C14F31300b2) · **Deploy tx:** [`0x23434b4680bef036dd2ed103d2077807e4c2e0026a8d46c04c23190aa28e02b6`](https://scan.botchain.ai/tx/0x23434b4680bef036dd2ed103d2077807e4c2e0026a8d46c04c23190aa28e02b6)
+- ⚠️ **No third-party security audit** was performed before the mainnet deployment — see [Data & security model](#data--security-model).
 
 ---
 
@@ -213,13 +214,13 @@ Built with Next.js, wired end-to-end to the live testnet contract — no mock da
 | Oracle | Node.js, TypeScript, Anthropic API (Claude), Supabase client, Render (hosting) |
 | Frontend | Next.js (App Router), TypeScript, Tailwind CSS, wagmi + viem, RainbowKit, TanStack Query |
 | Data | Supabase (Postgres + RLS) |
-| Chain | BOT Chain testnet (Chain ID 968) |
+| Chain | BOT Chain testnet (968) + mainnet (677), both live in parallel |
 
 ---
 
 ## Try it yourself — a full walkthrough
 
-You don't need to deploy anything — the live app is already wired to the deployed testnet contract. Here's exactly how to run through the full flow, including two pre-built demo repos (one designed to **pass** review, one designed to **fail** it) so you can see both outcomes without waiting on a real freelancer.
+You don't need to deploy anything — the live app is already wired to the deployed contracts on both networks (switch networks from the wallet menu in the app). This walkthrough uses **testnet** so you can freely test without spending real BOT. Mainnet works identically, using the mainnet contract and real funds. Here's exactly how to run through the full flow, including two pre-built demo repos (one designed to **pass** review, one designed to **fail** it) so you can see both outcomes without waiting on a real freelancer.
 
 ### What you'll need
 
@@ -289,7 +290,7 @@ v2 replaces this with a **DVN-style model** — the same pattern cross-chain mes
 
 The contract currently has Slither static analysis (clean, no High/Medium findings) and a Foundry test suite (83/83 passing — 72 unit, 9 fuzz at 256 runs, 2 invariant at 128k calls). That's a strong internal bar, but it's still one team checking its own work with automated and self-written tests.
 
-Before any mainnet deployment or handling of real value, v2 adds a **third-party security audit** — an external firm reviewing the contract specifically for the things automated tooling and internal tests are least likely to catch: economic/incentive attacks against the quorum and challenge mechanics, edge cases in the deadline/window state machine, and the owner-privileged `emergencyRescue` path in particular, given it's the one function in the system that can move funds outside the normal agent-verdict flow. This audit — not just "more internal tests" — is treated as a hard prerequisite for moving beyond testnet.
+**Disclosure:** mainnet deployment happened on this internal bar alone — Slither + the Foundry suite above — without a completed third-party audit. That was a deliberate, informed call under the hackathon's timeline, not an oversight, and it's a real centralization/risk tradeoff worth naming plainly rather than glossing over: an external firm has not independently reviewed the quorum/challenge economics, the deadline/window state machine's edge cases, or the owner-privileged `emergencyRescue` path (the one function that can move funds outside the normal agent-verdict flow). v2 still adds a **third-party security audit** — an external firm reviewing exactly those areas — as follow-up work, not as something already done.
 
 ---
 
@@ -302,6 +303,17 @@ Before any mainnet deployment or handling of real value, v2 adds a **third-party
 | Escrow contract | [`0xc45d948467Dd39278a456D4341C00C14F31300b2`](https://scan.bohr.life/address/0xc45d948467Dd39278a456D4341C00C14F31300b2) |
 | Deploy transaction | [`0xd89b554d819f68e0c4cec052185e600dbe090d55e110b482212abaae6ebb467f`](https://scan.bohr.life/tx/0xd89b554d819f68e0c4cec052185e600dbe090d55e110b482212abaae6ebb467f) |
 | Explorer | [scan.bohr.life](https://scan.bohr.life/) |
+
+**BOT Chain mainnet (Chain ID 677)**
+
+| | |
+|---|---|
+| Escrow contract | [`0xc45d948467Dd39278a456D4341C00C14F31300b2`](https://scan.botchain.ai/address/0xc45d948467Dd39278a456D4341C00C14F31300b2) |
+| Deploy transaction | [`0x23434b4680bef036dd2ed103d2077807e4c2e0026a8d46c04c23190aa28e02b6`](https://scan.botchain.ai/tx/0x23434b4680bef036dd2ed103d2077807e4c2e0026a8d46c04c23190aa28e02b6) |
+| Explorer | [scan.botchain.ai](https://scan.botchain.ai/) |
+| Timing windows | challengeWindow = 3 days, seniorArbiterWindow = 1 day, emergencyDelay = 7 days (production values, unlike testnet's shortened demo windows) |
+
+Same contract address on both networks is expected, not a mistake — it's a coincidence of `CREATE` address derivation (same deployer address + nonce + bytecode), not a shared contract. They are two fully independent deployments.
 
 ---
 

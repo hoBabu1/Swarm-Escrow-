@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useAccount, useWriteContract } from 'wagmi';
+import { useAccount, useChainId, useWriteContract } from 'wagmi';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import type { ReactNode } from 'react';
 import dynamic from 'next/dynamic';
@@ -9,9 +9,9 @@ import type { ComponentType } from 'react';
 import type { DatePickerProps } from 'react-datepicker';
 import { decodeEventLog, formatEther, isAddress, keccak256, parseEther, toBytes } from 'viem';
 import 'react-datepicker/dist/react-datepicker.css';
-import { swarmEscrowConfig } from '@/lib/contract';
+import { useSwarmEscrowConfig } from '@/lib/contract';
 import { SWARM_ESCROW_ABI } from '@/lib/abi';
-import { botChainTestnet } from '@/lib/chains';
+import { getExplorerBase } from '@/lib/chains';
 import { useClientEscrows, useWorkerEscrows } from '@/lib/hooks/useAddressEscrows';
 import { useEscrowsByIds } from '@/lib/hooks/useEscrowsByIds';
 import { EscrowStatus } from '@/lib/hooks/useEscrow';
@@ -24,7 +24,6 @@ import { AdminNavLink } from '@/components/AdminNavLink';
 import { useTxLifecycle } from '@/lib/hooks/useTxLifecycle';
 import { truncate, parseFeedbackRating } from '@/lib/escrowFormat';
 
-const EXPLORER_BASE = botChainTestnet.blockExplorers.default.url;
 
 // react-datepicker's default export is a class component whose `defaultProps` type
 // doesn't structurally satisfy next/dynamic's loader signature, hence the double cast.
@@ -100,6 +99,9 @@ function EscrowSection({
 export default function DashboardPage() {
   const router = useRouter();
   const { isConnected, address } = useAccount();
+  const swarmEscrowConfig = useSwarmEscrowConfig();
+  const chainId = useChainId();
+  const EXPLORER_BASE = getExplorerBase(chainId);
   const [tab, setTab] = useState<'client' | 'worker'>('client');
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -209,7 +211,7 @@ export default function DashboardPage() {
           const res = await fetch('/api/escrow-specs', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ escrowId: escrowId.toString(), specText: form.specText, specHash, txHash: receipt.transactionHash }),
+            body: JSON.stringify({ escrowId: escrowId.toString(), chainId, specText: form.specText, specHash, txHash: receipt.transactionHash }),
           });
           if (!res.ok) {
             const body = await res.json().catch(() => ({}));
@@ -225,7 +227,7 @@ export default function DashboardPage() {
       refetchClientEscrows();
       refetchWorkerEscrows();
     })();
-  }, [isConfirmed, receipt, form.specText, refetchClientIds, refetchWorkerIds, refetchClientEscrows, refetchWorkerEscrows]);
+  }, [isConfirmed, receipt, form.specText, chainId, refetchClientIds, refetchWorkerIds, refetchClientEscrows, refetchWorkerEscrows]);
 
   const activeEscrows = tab === 'client' ? clientEscrows : workerEscrows;
   const activeIdsLoading = tab === 'client' ? clientIdsLoading || clientEscrowsLoading : workerIdsLoading || workerEscrowsLoading;
@@ -259,7 +261,7 @@ export default function DashboardPage() {
   );
 
   const allEscrowIds = useMemo(() => [...clientIds, ...workerIds], [clientIds, workerIds]);
-  const rating = useAddressFeedback(address, allEscrowIds);
+  const rating = useAddressFeedback(address, allEscrowIds, chainId);
 
   // "Received" rows are already scoped to feedback the connected wallet was sent (not sent
   // itself) — for any given escrow that's always the counterparty's rating of the connected

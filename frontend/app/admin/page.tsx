@@ -1,11 +1,11 @@
 'use client';
 
-import { useAccount, useBlock, useReadContracts, useWriteContract } from 'wagmi';
+import { useAccount, useBlock, useChainId, useReadContracts, useWriteContract } from 'wagmi';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { formatEther, isAddress } from 'viem';
-import { swarmEscrowConfig } from '@/lib/contract';
-import { botChainTestnet } from '@/lib/chains';
+import { useSwarmEscrowConfig } from '@/lib/contract';
+import { getExplorerBase } from '@/lib/chains';
 import { EscrowStatus } from '@/lib/hooks/useEscrow';
 import { useEscrowsByIds, EscrowWithId } from '@/lib/hooks/useEscrowsByIds';
 import { useTxLifecycle } from '@/lib/hooks/useTxLifecycle';
@@ -14,8 +14,6 @@ import { STATUS_LABELS, truncate } from '@/lib/escrowFormat';
 import { TxLifecycleStatus } from '@/components/TxLifecycleStatus';
 import { StatCard, StatusPill } from '@/components/EscrowUI';
 import { WalletButton } from '@/components/WalletButton';
-
-const EXPLORER_BASE = botChainTestnet.blockExplorers.default.url;
 
 type RescueState = 'terminal' | 'locked' | 'available';
 
@@ -55,6 +53,7 @@ function ParamField({ label, fn, currentValue, onConfirmed }: { label: string; f
   const [userValue, setUserValue] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
   const value = userValue ?? currentValue ?? '';
+  const swarmEscrowConfig = useSwarmEscrowConfig();
 
   const { writeContract, data: txHash, isPending, error: writeError, reset } = useWriteContract();
   const { txState, isConfirmed } = useTxLifecycle(txHash, isPending);
@@ -117,6 +116,9 @@ function ParamField({ label, fn, currentValue, onConfirmed }: { label: string; f
 export default function AdminPage() {
   const { address, isConnected } = useAccount();
   const router = useRouter();
+  const swarmEscrowConfig = useSwarmEscrowConfig();
+  const chainId = useChainId();
+  const EXPLORER_BASE = getExplorerBase(chainId);
 
   // Ownership check lives in the shared useIsOwner hook (also used by AdminNavLink on every
   // other page) so this gate and the nav link never drift out of sync with two separate

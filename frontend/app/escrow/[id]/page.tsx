@@ -1,11 +1,11 @@
 'use client';
 
 import { useRouter, useParams } from 'next/navigation';
-import { useAccount, useWriteContract } from 'wagmi';
+import { useAccount, useChainId, useWriteContract } from 'wagmi';
 import { useState, useEffect, useRef } from 'react';
 import { formatEther, keccak256, toBytes } from 'viem';
-import { swarmEscrowConfig } from '@/lib/contract';
-import { botChainTestnet } from '@/lib/chains';
+import { useSwarmEscrowConfig } from '@/lib/contract';
+import { getExplorerBase } from '@/lib/chains';
 import { useEscrow, EscrowStatus, escrowExists, parseEscrowTuple, type EscrowStructTuple } from '@/lib/hooks/useEscrow';
 import { useAgentVerdicts, AgentRoleName } from '@/lib/hooks/useAgentVerdicts';
 import { useHashVerifiedText } from '@/lib/hooks/useHashVerifiedText';
@@ -22,7 +22,6 @@ import { selectWithTxHashFallback } from '@/lib/selectWithTxHashFallback';
 
 const RATING_PREFIX = /^(\d)\/5\s*(?:—|-)?\s*/;
 
-const EXPLORER_BASE = botChainTestnet.blockExplorers.default.url;
 
 function formatCountdown(ms: number) {
   if (ms <= 0) return '00:00:00';
@@ -260,6 +259,9 @@ export default function EscrowDetailPage() {
   const router = useRouter();
           const params = useParams();
           const {address} = useAccount();
+          const swarmEscrowConfig = useSwarmEscrowConfig();
+          const chainId = useChainId();
+          const EXPLORER_BASE = getExplorerBase(chainId);
           const [now, setNow] = useState(Date.now());
           const [specExpanded, setSpecExpanded] = useState(false);
           const [expandedReasoning, setExpandedReasoning] = useState<{ agent: string; text: string } | null>(null);
@@ -315,11 +317,11 @@ export default function EscrowDetailPage() {
           fetch('/api/challenge-docs', {
             method: 'PATCH',
           headers: {'Content-Type': 'application/json' },
-          body: JSON.stringify({escrowId: escrowId.toString(), txHash: challengeTxHash }),
+          body: JSON.stringify({escrowId: escrowId.toString(), chainId, txHash: challengeTxHash }),
         }).catch(() => { });
       }
     }
-  }, [isChallengeConfirmed, refetch, refetchVerdicts, escrowId, challengeTxHash]);
+  }, [isChallengeConfirmed, refetch, refetchVerdicts, escrowId, challengeTxHash, chainId]);
 
           const {writeContract: writeFeedback, data: feedbackTxHash, isPending: isFeedbackApproving, error: feedbackWriteError, reset: resetFeedbackWrite } = useWriteContract();
           const {txState: feedbackTxState, isConfirmed: isFeedbackConfirmed } = useTxLifecycle(feedbackTxHash, isFeedbackApproving);
@@ -333,11 +335,11 @@ export default function EscrowDetailPage() {
           fetch('/api/feedback-messages', {
             method: 'PATCH',
           headers: {'Content-Type': 'application/json' },
-          body: JSON.stringify({escrowId: escrowId.toString(), senderAddress: address, txHash: feedbackTxHash }),
+          body: JSON.stringify({escrowId: escrowId.toString(), chainId, senderAddress: address, txHash: feedbackTxHash }),
         }).catch(() => { });
       }
     }
-  }, [isFeedbackConfirmed, refetch, escrowId, feedbackTxHash, address]);
+  }, [isFeedbackConfirmed, refetch, escrowId, feedbackTxHash, address, chainId]);
 
           const {writeContract: writeFinalize, data: finalizeTxHash, isPending: isFinalizeApproving, error: finalizeWriteError, reset: resetFinalizeWrite } = useWriteContract();
           const {txState: finalizeTxState, isConfirmed: isFinalizeConfirmed } = useTxLifecycle(finalizeTxHash, isFinalizeApproving);
@@ -470,39 +472,39 @@ export default function EscrowDetailPage() {
 
           const specText = useHashVerifiedText({
             table: 'escrow_specs',
-          match: escrowId !== undefined ? {escrow_id: Number(escrowId) } : { },
+          match: escrowId !== undefined ? {escrow_id: Number(escrowId), chain_id: chainId } : { },
           textColumn: 'spec_text',
           onChainHash: escrow?.specHash,
   });
 
           const challengeReasonText = useHashVerifiedText({
             table: 'challenge_docs',
-          match: escrowId !== undefined ? {escrow_id: Number(escrowId) } : { },
+          match: escrowId !== undefined ? {escrow_id: Number(escrowId), chain_id: chainId } : { },
           textColumn: 'document_text',
           onChainHash: escrow?.hasChallenged ? escrow.challengeReasoningHash : undefined,
   });
 
           const reviewerText = useHashVerifiedText({
             table: 'verdicts',
-          match: escrowId !== undefined ? {escrow_id: Number(escrowId), agent_role: 'reviewer' } : { },
+          match: escrowId !== undefined ? {escrow_id: Number(escrowId), chain_id: chainId, agent_role: 'reviewer' } : { },
           textColumn: 'reasoning_text',
           onChainHash: verdicts[0]?.hasVoted ? verdicts[0].reasoningHash : undefined,
   });
           const fraudSanityText = useHashVerifiedText({
             table: 'verdicts',
-          match: escrowId !== undefined ? {escrow_id: Number(escrowId), agent_role: 'fraud_sanity' } : { },
+          match: escrowId !== undefined ? {escrow_id: Number(escrowId), chain_id: chainId, agent_role: 'fraud_sanity' } : { },
           textColumn: 'reasoning_text',
           onChainHash: verdicts[1]?.hasVoted ? verdicts[1].reasoningHash : undefined,
   });
           const arbiterText = useHashVerifiedText({
             table: 'verdicts',
-          match: escrowId !== undefined ? {escrow_id: Number(escrowId), agent_role: 'arbiter' } : { },
+          match: escrowId !== undefined ? {escrow_id: Number(escrowId), chain_id: chainId, agent_role: 'arbiter' } : { },
           textColumn: 'reasoning_text',
           onChainHash: verdicts[2]?.hasVoted ? verdicts[2].reasoningHash : undefined,
   });
           const seniorArbiterText = useHashVerifiedText({
             table: 'verdicts',
-          match: escrowId !== undefined ? {escrow_id: Number(escrowId), agent_role: 'senior_arbiter' } : { },
+          match: escrowId !== undefined ? {escrow_id: Number(escrowId), chain_id: chainId, agent_role: 'senior_arbiter' } : { },
           textColumn: 'reasoning_text',
           onChainHash: seniorArbiterVote.hasVoted ? seniorArbiterVote.reasoningHash : undefined,
   });
@@ -604,6 +606,7 @@ export default function EscrowDetailPage() {
           headers: {'Content-Type': 'application/json' },
           body: JSON.stringify({
             escrowId: escrowId.toString(),
+          chainId,
           challengerAddress: address,
           documentText: challengeReason,
           documentHash: reasoningHash,
@@ -654,6 +657,7 @@ export default function EscrowDetailPage() {
           headers: {'Content-Type': 'application/json' },
           body: JSON.stringify({
             escrowId: escrowId.toString(),
+          chainId,
           senderAddress: address,
           messageText: combined,
           messageHash,

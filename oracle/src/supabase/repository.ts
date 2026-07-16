@@ -36,11 +36,17 @@ async function insertRow<T extends TableName>(table: T, row: Insert<T>): Promise
   return data as Row<T>;
 }
 
-async function selectByEscrowId<T extends TableName>(table: T, escrowId: number): Promise<Row<T>[]> {
+async function selectByEscrowId<T extends TableName>(table: T, escrowId: number, chainId: number): Promise<Row<T>[]> {
   // escrow_id is a Solidity uint256 / ethers v6 bigint at the call site;
   // callers must Number(escrowId) before calling in (safe — escrow IDs are a
   // small sequential counter, well under Number.MAX_SAFE_INTEGER).
-  const { data, error } = await (supabase.from(table as never) as any).select("*").eq("escrow_id", escrowId);
+  // escrow_id alone is not unique across networks (each chain's contract
+  // counts escrows from 0 independently), so chain_id is always required
+  // alongside it to avoid reading another network's row by mistake.
+  const { data, error } = await (supabase.from(table as never) as any)
+    .select("*")
+    .eq("escrow_id", escrowId)
+    .eq("chain_id", chainId);
   if (error) {
     throw new SupabaseRepositoryError(`Supabase select from "${table}" failed: ${error.message}`, error.code);
   }
@@ -72,34 +78,45 @@ export async function insertVerdict(row: Insert<"verdicts">): Promise<Row<"verdi
   assertBytes32Hex(row.reasoning_hash, "reasoning_hash");
   await assertNoExistingRow(
     "verdicts",
-    { escrow_id: row.escrow_id, agent_role: row.agent_role },
-    `verdict for escrow ${row.escrow_id} / role ${row.agent_role}`,
+    { escrow_id: row.escrow_id, chain_id: row.chain_id, agent_role: row.agent_role },
+    `verdict for escrow ${row.escrow_id} on chain ${row.chain_id} / role ${row.agent_role}`,
   );
   return insertRow("verdicts", row);
 }
-export const getVerdicts = (escrowId: number) => selectByEscrowId("verdicts", escrowId);
+export const getVerdicts = (escrowId: number, chainId: number) => selectByEscrowId("verdicts", escrowId, chainId);
 
 export async function insertEscrowSpec(row: Insert<"escrow_specs">): Promise<Row<"escrow_specs">> {
   assertBytes32Hex(row.spec_hash, "spec_hash");
-  await assertNoExistingRow("escrow_specs", { escrow_id: row.escrow_id }, `spec for escrow ${row.escrow_id}`);
+  await assertNoExistingRow(
+    "escrow_specs",
+    { escrow_id: row.escrow_id, chain_id: row.chain_id },
+    `spec for escrow ${row.escrow_id} on chain ${row.chain_id}`,
+  );
   return insertRow("escrow_specs", row);
 }
-export const getEscrowSpecs = (escrowId: number) => selectByEscrowId("escrow_specs", escrowId);
+export const getEscrowSpecs = (escrowId: number, chainId: number) =>
+  selectByEscrowId("escrow_specs", escrowId, chainId);
 
 export async function insertChallengeDoc(row: Insert<"challenge_docs">): Promise<Row<"challenge_docs">> {
   assertBytes32Hex(row.document_hash, "document_hash");
-  await assertNoExistingRow("challenge_docs", { escrow_id: row.escrow_id }, `challenge doc for escrow ${row.escrow_id}`);
+  await assertNoExistingRow(
+    "challenge_docs",
+    { escrow_id: row.escrow_id, chain_id: row.chain_id },
+    `challenge doc for escrow ${row.escrow_id} on chain ${row.chain_id}`,
+  );
   return insertRow("challenge_docs", row);
 }
-export const getChallengeDocs = (escrowId: number) => selectByEscrowId("challenge_docs", escrowId);
+export const getChallengeDocs = (escrowId: number, chainId: number) =>
+  selectByEscrowId("challenge_docs", escrowId, chainId);
 
 export async function insertFeedbackMessage(row: Insert<"feedback_messages">): Promise<Row<"feedback_messages">> {
   assertBytes32Hex(row.message_hash, "message_hash");
   await assertNoExistingRow(
     "feedback_messages",
-    { escrow_id: row.escrow_id, sender_address: row.sender_address },
-    `feedback for escrow ${row.escrow_id} from ${row.sender_address}`,
+    { escrow_id: row.escrow_id, chain_id: row.chain_id, sender_address: row.sender_address },
+    `feedback for escrow ${row.escrow_id} on chain ${row.chain_id} from ${row.sender_address}`,
   );
   return insertRow("feedback_messages", row);
 }
-export const getFeedbackMessages = (escrowId: number) => selectByEscrowId("feedback_messages", escrowId);
+export const getFeedbackMessages = (escrowId: number, chainId: number) =>
+  selectByEscrowId("feedback_messages", escrowId, chainId);

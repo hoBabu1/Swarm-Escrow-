@@ -8,15 +8,19 @@ import { useEscrowsByIds } from '@/lib/hooks/useEscrowsByIds';
 import { useEscrowStats } from '@/lib/hooks/useEscrowStats';
 import { useAddressFeedback } from '@/lib/hooks/useAddressFeedback';
 import { truncate, parseFeedbackRating } from '@/lib/escrowFormat';
-import { botChainTestnet } from '@/lib/chains';
+import { botChainTestnet, getExplorerBase } from '@/lib/chains';
 import { StatCard, EscrowRowItem } from '@/components/EscrowUI';
 import { WalletButton } from '@/components/WalletButton';
 
-const EXPLORER_BASE = botChainTestnet.blockExplorers.default.url;
+// Pinned to testnet regardless of the connected wallet's active chain — wallet lookup is
+// read-only history and, for now, only shows testnet data (mainnet history to follow later).
+const LOOKUP_CHAIN_ID = botChainTestnet.id;
 
 export default function WalletLookupPage() {
   const router = useRouter();
   const params = useParams();
+  const chainId = LOOKUP_CHAIN_ID;
+  const EXPLORER_BASE = getExplorerBase(chainId);
   const address = (params.address as string) || '';
   const [tab, setTab] = useState<'client' | 'worker'>('worker');
   const [lookupAddr, setLookupAddr] = useState('');
@@ -34,17 +38,17 @@ export default function WalletLookupPage() {
   };
 
   const validAddress = isAddress(address) ? (address as `0x${string}`) : undefined;
-  const { data: clientIdsData, isLoading: clientIdsLoading, isError: clientIdsError } = useClientEscrows(validAddress);
-  const { data: workerIdsData, isLoading: workerIdsLoading, isError: workerIdsError } = useWorkerEscrows(validAddress);
+  const { data: clientIdsData, isLoading: clientIdsLoading, isError: clientIdsError } = useClientEscrows(validAddress, chainId);
+  const { data: workerIdsData, isLoading: workerIdsLoading, isError: workerIdsError } = useWorkerEscrows(validAddress, chainId);
 
   const clientIds = useMemo(() => (clientIdsData as readonly bigint[] | undefined) ?? [], [clientIdsData]);
   const workerIds = useMemo(() => (workerIdsData as readonly bigint[] | undefined) ?? [], [workerIdsData]);
 
-  const { escrows: clientEscrows, isLoading: clientEscrowsLoading, isError: clientEscrowsError } = useEscrowsByIds(clientIds);
-  const { escrows: workerEscrows, isLoading: workerEscrowsLoading, isError: workerEscrowsError } = useEscrowsByIds(workerIds);
+  const { escrows: clientEscrows, isLoading: clientEscrowsLoading, isError: clientEscrowsError } = useEscrowsByIds(clientIds, chainId);
+  const { escrows: workerEscrows, isLoading: workerEscrowsLoading, isError: workerEscrowsError } = useEscrowsByIds(workerIds, chainId);
 
   const allEscrowIds = useMemo(() => [...clientIds, ...workerIds], [clientIds, workerIds]);
-  const feedback = useAddressFeedback(validAddress, allEscrowIds, 'received');
+  const feedback = useAddressFeedback(validAddress, allEscrowIds, chainId, 'received');
 
   // Same badge logic as the dashboard: "received" rows are already scoped to feedback the
   // looked-up address was sent (not sent itself), so per escrow this is always the

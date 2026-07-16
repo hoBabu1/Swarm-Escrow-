@@ -1,17 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createPublicClient, http, keccak256, toBytes } from 'viem';
-import { botChainTestnet } from '@/lib/chains';
-import { swarmEscrowConfig } from '@/lib/contract';
+import { keccak256, toBytes } from 'viem';
+import { getSwarmEscrowConfig } from '@/lib/contract';
+import { getServerPublicClient, isSupportedChainId } from '@/lib/serverChain';
 import { EscrowStatus, EscrowStructTuple, parseEscrowTuple } from '@/lib/hooks/useEscrow';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { sameAddress } from '@/lib/escrowFormat';
 import { createIpRateLimiter } from '@/lib/rateLimit';
 import { verifyMinedTxOnContract } from '@/lib/verifyOnChainTx';
-
-const publicClient = createPublicClient({
-  chain: botChainTestnet,
-  transport: http(process.env.RPC_URL_TESTNET ?? botChainTestnet.rpcUrls.default.http[0]),
-});
 
 // Same single-process, per-IP limiter as escrow-specs — sufficient to blunt spam for this
 // hackathon deployment without pulling in an external store.
@@ -23,17 +18,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Too many requests, try again shortly' }, { status: 429 });
   }
 
-  let body: { escrowId?: number | string; challengerAddress?: string; documentText?: string; documentHash?: string };
+  let body: {
+    escrowId?: number | string;
+    chainId?: number;
+    challengerAddress?: string;
+    documentText?: string;
+    documentHash?: string;
+  };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { escrowId, challengerAddress, documentText, documentHash } = body;
+  const { escrowId, chainId, challengerAddress, documentText, documentHash } = body;
 
   if (escrowId === undefined || Number.isNaN(Number(escrowId))) {
     return NextResponse.json({ error: 'escrowId is required' }, { status: 400 });
+  }
+  if (!isSupportedChainId(chainId)) {
+    return NextResponse.json({ error: 'chainId is required and must be a supported network' }, { status: 400 });
   }
   if (!challengerAddress || typeof challengerAddress !== 'string') {
     return NextResponse.json({ error: 'challengerAddress is required' }, { status: 400 });
@@ -57,8 +61,8 @@ export async function POST(req: NextRequest) {
   // may write a challenge doc for it.
   let escrow;
   try {
-    const data = await publicClient.readContract({
-      ...swarmEscrowConfig,
+    const data = await getServerPublicClient(chainId).readContract({
+      ...getSwarmEscrowConfig(chainId),
       functionName: 'escrows',
       args: [BigInt(escrowId)],
     });
@@ -82,8 +86,14 @@ export async function POST(req: NextRequest) {
   const { error } = await getSupabaseAdmin()
     .from('challenge_docs')
     .upsert(
-      { escrow_id: Number(escrowId), challenger_address: challengerAddress, document_text: documentText, document_hash: documentHash },
-      { onConflict: 'escrow_id' }
+      {
+        escrow_id: Number(escrowId),
+        chain_id: chainId,
+        challenger_address: challengerAddress,
+        document_text: documentText,
+        document_hash: documentHash,
+      },
+      { onConflict: 'escrow_id,chain_id' }
     );
 
   if (error) {
@@ -101,19 +111,26 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Too many requests, try again shortly' }, { status: 429 });
   }
 
-  let body: { escrowId?: number | string; txHash?: string };
+  let body: { escrowId?: number | string; chainId?: number; txHash?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { escrowId, txHash } = body;
+  const { escrowId, chainId, txHash } = body;
   if (escrowId === undefined || Number.isNaN(Number(escrowId))) {
     return NextResponse.json({ error: 'escrowId is required' }, { status: 400 });
   }
+  if (!isSupportedChainId(chainId)) {
+    return NextResponse.json({ error: 'chainId is required and must be a supported network' }, { status: 400 });
+  }
 
-  const verification = await verifyMinedTxOnContract(publicClient, txHash, swarmEscrowConfig.address);
+  const verification = await verifyMinedTxOnContract(
+    getServerPublicClient(chainId),
+    txHash,
+    getSwarmEscrowConfig(chainId).address
+  );
   if (!verification.ok) {
     return NextResponse.json({ error: verification.message }, { status: 400 });
   }
@@ -121,7 +138,8 @@ export async function PATCH(req: NextRequest) {
   const { error } = await getSupabaseAdmin()
     .from('challenge_docs')
     .update({ tx_hash: txHash })
-    .eq('escrow_id', Number(escrowId));
+    .eq('escrow_id', Number(escrowId))
+    .eq('chain_id', chainId);
 
   if (error) {
     return NextResponse.json({ error: 'Failed to store tx hash' }, { status: 500 });

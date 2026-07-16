@@ -1,17 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createPublicClient, http, keccak256, toBytes } from 'viem';
-import { botChainTestnet } from '@/lib/chains';
-import { swarmEscrowConfig } from '@/lib/contract';
+import { keccak256, toBytes } from 'viem';
+import { getSwarmEscrowConfig } from '@/lib/contract';
+import { getServerPublicClient, isSupportedChainId } from '@/lib/serverChain';
 import { EscrowStatus, EscrowStructTuple, parseEscrowTuple } from '@/lib/hooks/useEscrow';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { sameAddress } from '@/lib/escrowFormat';
 import { createIpRateLimiter } from '@/lib/rateLimit';
 import { verifyMinedTxOnContract } from '@/lib/verifyOnChainTx';
-
-const publicClient = createPublicClient({
-  chain: botChainTestnet,
-  transport: http(process.env.RPC_URL_TESTNET ?? botChainTestnet.rpcUrls.default.http[0]),
-});
 
 // Same single-process, per-IP limiter as escrow-specs/challenge-docs — sufficient to blunt
 // spam for this hackathon deployment without pulling in an external store.
@@ -23,17 +18,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Too many requests, try again shortly' }, { status: 429 });
   }
 
-  let body: { escrowId?: number | string; senderAddress?: string; messageText?: string; messageHash?: string };
+  let body: {
+    escrowId?: number | string;
+    chainId?: number;
+    senderAddress?: string;
+    messageText?: string;
+    messageHash?: string;
+  };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { escrowId, senderAddress, messageText, messageHash } = body;
+  const { escrowId, chainId, senderAddress, messageText, messageHash } = body;
 
   if (escrowId === undefined || Number.isNaN(Number(escrowId))) {
     return NextResponse.json({ error: 'escrowId is required' }, { status: 400 });
+  }
+  if (!isSupportedChainId(chainId)) {
+    return NextResponse.json({ error: 'chainId is required and must be a supported network' }, { status: 400 });
   }
   if (!senderAddress || typeof senderAddress !== 'string') {
     return NextResponse.json({ error: 'senderAddress is required' }, { status: 400 });
@@ -56,8 +60,8 @@ export async function POST(req: NextRequest) {
   // and that party hasn't already left feedback on it.
   let escrow;
   try {
-    const data = await publicClient.readContract({
-      ...swarmEscrowConfig,
+    const data = await getServerPublicClient(chainId).readContract({
+      ...getSwarmEscrowConfig(chainId),
       functionName: 'escrows',
       args: [BigInt(escrowId)],
     });
@@ -82,8 +86,14 @@ export async function POST(req: NextRequest) {
   const { error } = await getSupabaseAdmin()
     .from('feedback_messages')
     .upsert(
-      { escrow_id: Number(escrowId), sender_address: senderAddress, message_text: messageText, message_hash: messageHash },
-      { onConflict: 'escrow_id,sender_address' }
+      {
+        escrow_id: Number(escrowId),
+        chain_id: chainId,
+        sender_address: senderAddress,
+        message_text: messageText,
+        message_hash: messageHash,
+      },
+      { onConflict: 'escrow_id,chain_id,sender_address' }
     );
 
   if (error) {
@@ -101,21 +111,28 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Too many requests, try again shortly' }, { status: 429 });
   }
 
-  let body: { escrowId?: number | string; senderAddress?: string; txHash?: string };
+  let body: { escrowId?: number | string; chainId?: number; senderAddress?: string; txHash?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { escrowId, senderAddress, txHash } = body;
+  const { escrowId, chainId, senderAddress, txHash } = body;
   if (escrowId === undefined || Number.isNaN(Number(escrowId))) {
     return NextResponse.json({ error: 'escrowId is required' }, { status: 400 });
+  }
+  if (!isSupportedChainId(chainId)) {
+    return NextResponse.json({ error: 'chainId is required and must be a supported network' }, { status: 400 });
   }
   if (!senderAddress || typeof senderAddress !== 'string') {
     return NextResponse.json({ error: 'senderAddress is required' }, { status: 400 });
   }
-  const verification = await verifyMinedTxOnContract(publicClient, txHash, swarmEscrowConfig.address);
+  const verification = await verifyMinedTxOnContract(
+    getServerPublicClient(chainId),
+    txHash,
+    getSwarmEscrowConfig(chainId).address
+  );
   if (!verification.ok) {
     return NextResponse.json({ error: verification.message }, { status: 400 });
   }
@@ -124,6 +141,7 @@ export async function PATCH(req: NextRequest) {
     .from('feedback_messages')
     .update({ tx_hash: txHash })
     .eq('escrow_id', Number(escrowId))
+    .eq('chain_id', chainId)
     .eq('sender_address', senderAddress);
 
   if (error) {

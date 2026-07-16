@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createPublicClient, http, keccak256, toBytes } from 'viem';
-import { botChainTestnet } from '@/lib/chains';
-import { swarmEscrowConfig } from '@/lib/contract';
+import { keccak256, toBytes } from 'viem';
+import { getSwarmEscrowConfig } from '@/lib/contract';
+import { getServerPublicClient, isSupportedChainId } from '@/lib/serverChain';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { createIpRateLimiter } from '@/lib/rateLimit';
 import { verifyMinedTxOnContract } from '@/lib/verifyOnChainTx';
 import { EscrowStructTuple, parseEscrowTuple } from '@/lib/hooks/useEscrow';
-
-const publicClient = createPublicClient({
-  chain: botChainTestnet,
-  transport: http(process.env.RPC_URL_TESTNET ?? botChainTestnet.rpcUrls.default.http[0]),
-});
 
 // Very small in-memory per-IP limiter — this is a single Next.js server process for a
 // hackathon deployment, not a multi-instance one, so this is sufficient to blunt spam
@@ -23,17 +18,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Too many requests, try again shortly' }, { status: 429 });
   }
 
-  let body: { escrowId?: number | string; specText?: string; specHash?: string; txHash?: string };
+  let body: { escrowId?: number | string; chainId?: number; specText?: string; specHash?: string; txHash?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { escrowId, specText, specHash, txHash } = body;
+  const { escrowId, chainId, specText, specHash, txHash } = body;
 
   if (escrowId === undefined || Number.isNaN(Number(escrowId))) {
     return NextResponse.json({ error: 'escrowId is required' }, { status: 400 });
+  }
+  if (!isSupportedChainId(chainId)) {
+    return NextResponse.json({ error: 'chainId is required and must be a supported network' }, { status: 400 });
   }
   if (!specText || specText.trim().length === 0) {
     return NextResponse.json({ error: 'specText is required' }, { status: 400 });
@@ -52,8 +50,8 @@ export async function POST(req: NextRequest) {
   // that isn't theirs, or for an ID that doesn't exist yet.
   let onChainSpecHash: string;
   try {
-    const data = await publicClient.readContract({
-      ...swarmEscrowConfig,
+    const data = await getServerPublicClient(chainId).readContract({
+      ...getSwarmEscrowConfig(chainId),
       functionName: 'escrows',
       args: [BigInt(escrowId)],
     });
@@ -75,7 +73,11 @@ export async function POST(req: NextRequest) {
   // tx_hash link rather than rejecting the whole save.
   let verifiedTxHash: string | null = null;
   if (txHash !== undefined) {
-    const verification = await verifyMinedTxOnContract(publicClient, txHash, swarmEscrowConfig.address);
+    const verification = await verifyMinedTxOnContract(
+      getServerPublicClient(chainId),
+      txHash,
+      getSwarmEscrowConfig(chainId).address
+    );
     if (verification.ok) {
       verifiedTxHash = txHash as string;
     }
@@ -84,8 +86,8 @@ export async function POST(req: NextRequest) {
   let { error } = await getSupabaseAdmin()
     .from('escrow_specs')
     .upsert(
-      { escrow_id: Number(escrowId), spec_text: specText, spec_hash: specHash, tx_hash: verifiedTxHash },
-      { onConflict: 'escrow_id' }
+      { escrow_id: Number(escrowId), chain_id: chainId, spec_text: specText, spec_hash: specHash, tx_hash: verifiedTxHash },
+      { onConflict: 'escrow_id,chain_id' }
     );
 
   // Same fallback intent as selectWithTxHashFallback on the read side — if the tx_hash

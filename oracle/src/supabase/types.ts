@@ -8,6 +8,7 @@ export interface Database {
         Row: {
           id: number;
           escrow_id: number;
+          chain_id: number;
           agent_role: AgentRoleLabel;
           verdict: boolean;
           reasoning_text: string;
@@ -17,6 +18,7 @@ export interface Database {
         };
         Insert: {
           escrow_id: number;
+          chain_id: number;
           agent_role: AgentRoleLabel;
           verdict: boolean;
           reasoning_text: string;
@@ -29,6 +31,7 @@ export interface Database {
         Row: {
           id: number;
           escrow_id: number;
+          chain_id: number;
           spec_text: string;
           spec_hash: string;
           tx_hash: string | null;
@@ -36,6 +39,7 @@ export interface Database {
         };
         Insert: {
           escrow_id: number;
+          chain_id: number;
           spec_text: string;
           spec_hash: string;
           tx_hash?: string | null;
@@ -46,6 +50,7 @@ export interface Database {
         Row: {
           id: number;
           escrow_id: number;
+          chain_id: number;
           challenger_address: string;
           document_text: string;
           document_hash: string;
@@ -54,6 +59,7 @@ export interface Database {
         };
         Insert: {
           escrow_id: number;
+          chain_id: number;
           challenger_address: string;
           document_text: string;
           document_hash: string;
@@ -65,6 +71,7 @@ export interface Database {
         Row: {
           id: number;
           escrow_id: number;
+          chain_id: number;
           sender_address: string;
           message_text: string;
           message_hash: string;
@@ -73,6 +80,7 @@ export interface Database {
         };
         Insert: {
           escrow_id: number;
+          chain_id: number;
           sender_address: string;
           message_text: string;
           message_hash: string;

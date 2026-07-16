@@ -1,8 +1,9 @@
 import { useReadContract } from "wagmi";
-import { swarmEscrowConfig } from "../contract";
+import { useSwarmEscrowConfig } from "../contract";
 import { ZERO_ADDRESS } from "./useEscrow";
 
-export function useClientEscrows(address: `0x${string}` | undefined) {
+export function useClientEscrows(address: `0x${string}` | undefined, chainIdOverride?: number) {
+  const swarmEscrowConfig = useSwarmEscrowConfig(chainIdOverride);
   return useReadContract({
     ...swarmEscrowConfig,
     functionName: "getClientEscrows",
@@ -11,7 +12,8 @@ export function useClientEscrows(address: `0x${string}` | undefined) {
   });
 }
 
-export function useWorkerEscrows(address: `0x${string}` | undefined) {
+export function useWorkerEscrows(address: `0x${string}` | undefined, chainIdOverride?: number) {
+  const swarmEscrowConfig = useSwarmEscrowConfig(chainIdOverride);
   return useReadContract({
     ...swarmEscrowConfig,
     functionName: "getWorkerEscrows",

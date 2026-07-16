@@ -3,6 +3,7 @@ import { contract } from "../contract/client.js";
 import { getVerdict, getSeniorArbiterVote } from "../contract/reads.js";
 import { AgentRole } from "../contract/types.js";
 import { insertVerdict, getVerdicts, SupabaseRepositoryError, DUPLICATE_INSERT_CODE } from "../supabase/repository.js";
+import { env } from "../config/env.js";
 import type { AgentRoleLabel } from "../supabase/types.js";
 import type { AgentVerdict } from "../agents/base.js";
 import { withTxLock } from "../lib/txMutex.js";
@@ -43,6 +44,7 @@ async function ensureSupabaseRow(
   try {
     await insertVerdict({
       escrow_id: Number(escrowId),
+      chain_id: env.CHAIN_ID,
       agent_role: label,
       verdict: verdict.approved,
       reasoning_text: verdict.reasoningText,
@@ -50,7 +52,7 @@ async function ensureSupabaseRow(
     });
   } catch (err) {
     if (err instanceof SupabaseRepositoryError && err.code === DUPLICATE_INSERT_CODE) {
-      const existing = await getVerdicts(Number(escrowId));
+      const existing = await getVerdicts(Number(escrowId), env.CHAIN_ID);
       const match = existing.find((v) => v.agent_role === label);
       // Compare BOTH the hash and the approved boolean — a hash-only check
       // would treat a retry carrying a different approved value (while

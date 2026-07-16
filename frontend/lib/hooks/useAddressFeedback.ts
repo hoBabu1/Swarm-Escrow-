@@ -39,11 +39,12 @@ export interface AddressFeedbackSummary {
 export function useAddressFeedback(
   address: string | undefined,
   escrowIds: readonly bigint[],
+  chainId: number,
   direction: "received" | "sent" = "received"
 ): AddressFeedbackSummary {
   const idsKey = escrowIds.join(",");
   const hasQuery = !!address && escrowIds.length > 0;
-  const currentKey = `${address ?? ""}|${idsKey}|${direction}`;
+  const currentKey = `${address ?? ""}|${idsKey}|${chainId}|${direction}`;
 
   const [result, setResult] = useState<FetchResult | null>(null);
 
@@ -55,6 +56,7 @@ export function useAddressFeedback(
       const { data, error } = await supabase
         .from("feedback_messages")
         .select("escrow_id, message_text, sender_address")
+        .eq("chain_id", chainId)
         .in("escrow_id", idsKey.split(",").map(Number));
 
       if (cancelled) return;
@@ -82,7 +84,7 @@ export function useAddressFeedback(
     return () => {
       cancelled = true;
     };
-  }, [hasQuery, currentKey, idsKey, address, direction]);
+  }, [hasQuery, currentKey, idsKey, address, chainId, direction]);
 
   if (!hasQuery) {
     return { rows: [], average: null, count: 0, loading: false, error: null };

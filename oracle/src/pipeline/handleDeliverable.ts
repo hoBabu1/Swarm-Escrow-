@@ -9,6 +9,7 @@ import { submitAgentVerdict } from "../verdict/submit.js";
 import { tryAutoResolve } from "./autoResolve.js";
 import { logger } from "../lib/logger.js";
 import type { DeliverableSubmittedEvent } from "../contract/events.js";
+import { env } from "../config/env.js";
 
 type ReviewOrFraudRole = AgentRole.Reviewer | AgentRole.FraudSanity;
 
@@ -29,7 +30,7 @@ async function computeOrFetchVerdict(
   }
   // Already voted on-chain (e.g. this event was replayed after a restart) —
   // reuse the stored reasoning text rather than re-spending on the AI call.
-  const rows = await getVerdicts(Number(escrowId));
+  const rows = await getVerdicts(Number(escrowId), env.CHAIN_ID);
   const row = rows.find((r) => r.agent_role === label);
   if (!row) {
     throw new Error(
@@ -72,7 +73,7 @@ export async function handleDeliverableSubmitted(event: DeliverableSubmittedEven
       return;
     }
 
-    const specRows = await getEscrowSpecs(Number(escrowId));
+    const specRows = await getEscrowSpecs(Number(escrowId), env.CHAIN_ID);
     const specText = specRows[0]?.spec_text;
     if (!specText) {
       logger.error("deliverable_missing_spec_text", logCtx);

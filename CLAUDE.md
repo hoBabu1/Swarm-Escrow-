@@ -62,7 +62,12 @@ swarm-escrow/
 ## Network Config
 
 - **Testnet:** Chain ID 968, RPC `https://rpc.bohr.life`, faucet `https://faucet.botchain.ai/basic`
-- **Mainnet:** Chain ID 677, RPC `https://rpc.botchain.ai` (only if time permits after testnet is solid)
+- **Mainnet:** Chain ID 677, RPC `https://rpc.botchain.ai`
+
+Both networks are deployed and run live in parallel (separate contract instances, separate
+oracle Render services, shared Supabase project — see Supabase Schema section above for how
+rows are kept from colliding across networks). No third-party security audit was performed
+before the mainnet deployment — see the README's disclosure section.
 
 ## Contract — Full State Machine
 
@@ -116,9 +121,18 @@ enum AgentRole { Reviewer, FraudSanity, Arbiter }
 
 ## Supabase Schema
 
+Both BOT Chain testnet (968) and mainnet (677) run live in parallel against the same
+Supabase project. Escrow IDs are a per-contract counter, so escrow #3 on testnet and
+escrow #3 on mainnet are unrelated escrows with the same ID — every table below is keyed
+by `(escrow_id, chain_id)` (or `(escrow_id, chain_id, sender_address)` for feedback, or
+`(escrow_id, chain_id, agent_role)` for verdicts), never `escrow_id` alone. `chain_id` is
+968 or 677, matching whichever network wrote the row (see `oracle/src/config/env.ts`'s
+`CHAIN_ID` var and `frontend/lib/serverChain.ts`).
+
 ```sql
 create table verdicts (
   escrow_id bigint,
+  chain_id bigint,        -- 968 (testnet) or 677 (mainnet) — see note above
   agent_role text,       -- 'reviewer' | 'fraud_sanity' | 'arbiter' | 'senior_arbiter'
   verdict boolean,
   reasoning_text text,
@@ -129,6 +143,7 @@ create table verdicts (
 
 create table escrow_specs (
   escrow_id bigint,
+  chain_id bigint,        -- 968 (testnet) or 677 (mainnet) — see note above
   spec_text text,
   spec_hash text,
   tx_hash text,           -- createEscrow tx hash, nullable for rows written before this column existed
@@ -137,6 +152,7 @@ create table escrow_specs (
 
 create table challenge_docs (
   escrow_id bigint,
+  chain_id bigint,        -- 968 (testnet) or 677 (mainnet) — see note above
   challenger_address text,
   document_text text,
   document_hash text,
@@ -146,6 +162,7 @@ create table challenge_docs (
 
 create table feedback_messages (
   escrow_id bigint,
+  chain_id bigint,        -- 968 (testnet) or 677 (mainnet) — see note above
   sender_address text,   -- client or worker address
   message_text text,
   message_hash text,
@@ -154,17 +171,31 @@ create table feedback_messages (
 );
 ```
 
+Migrations live in `supabase/migrations/` and are applied manually (SQL editor or
+`supabase db push`) — there is no CI/CD pipeline wired to apply them automatically.
+
 ## Environment Variables (`.env`, never commit)
+
+The oracle codebase is network-agnostic — `RPC_URL`, `CHAIN_ID`, and `CONTRACT_ADDRESS`
+below describe ONE deployment. Testnet and mainnet each get their own Render service with
+their own values for these three; everything else is shared across both:
 
 ORACLE_PRIVATE_KEY=
 ANTHROPIC_API_KEY=
-RPC_URL_TESTNET=https://rpc.bohr.life
+RPC_URL=https://rpc.bohr.life
+CHAIN_ID=968
 CONTRACT_ADDRESS=0xc45d948467Dd39278a456D4341C00C14F31300b2
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 POLL_INTERVAL_SECONDS=10
 
-On Render, these are set in the platform's environment variable dashboard, not committed to `.env`.
+`CHAIN_ID` must match whichever chain `RPC_URL` actually points to — it tags every row this
+process writes to Supabase (see Supabase Schema above). On Render, these are set in the
+platform's environment variable dashboard, not committed to `.env`.
+
+The frontend has its own analogous split: `NEXT_PUBLIC_CONTRACT_ADDRESS_TESTNET` and
+`NEXT_PUBLIC_CONTRACT_ADDRESS_MAINNET` (in `frontend/.env.local`), since both networks are
+reachable from the same Next.js app via wagmi's chain switcher.
 
 ## Oracle Design Decisions
 

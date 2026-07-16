@@ -2,7 +2,7 @@ import { Contract, JsonRpcProvider, Wallet, type ContractTransactionResponse } f
 import { env } from "../config/env.js";
 import abi from "./SwarmEscrow.abi.json" with { type: "json" };
 
-export const provider = new JsonRpcProvider(env.RPC_URL_TESTNET);
+export const provider = new JsonRpcProvider(env.RPC_URL);
 
 // Signs and pays gas for submitVerdict/submitSeniorArbiterVerdict (chunk 6).
 // Access control for those calls is enforced on-chain (onlyOracle modifier);

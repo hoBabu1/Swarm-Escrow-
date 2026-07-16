@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useBalance } from "wagmi";
+import { useBalance, useSwitchChain } from "wagmi";
 import { ChevronDown, X } from "lucide-react";
 import { botChainMainnet, botChainTestnet } from "@/lib/chains";
 
@@ -21,9 +21,12 @@ function WalletBalancePill({ address, enabled }: { address: `0x${string}` | unde
   );
 }
 
+const NETWORKS = [botChainMainnet, botChainTestnet];
+
 export function WalletButton() {
   const [chainMenuOpen, setChainMenuOpen] = useState(false);
   const chainMenuRef = useRef<HTMLDivElement>(null);
+  const { switchChain, isPending: isSwitchingChain } = useSwitchChain();
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -102,23 +105,35 @@ export function WalletButton() {
                           </button>
                         </div>
                         <div className="flex flex-col gap-2">
-                          <div className="flex items-center justify-between rounded-2xl bg-aurora-green px-4 py-3 text-[#06120c]">
-                            <span className="text-base font-bold">{botChainTestnet.name}</span>
-                            <span className="flex items-center gap-2 text-sm">
-                              Connected
-                              <span className="size-2.5 rounded-full bg-[#22e800]" />
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            disabled
-                            className="flex cursor-not-allowed items-center justify-between rounded-2xl bg-white/10 px-4 py-3 text-left opacity-70"
-                          >
-                            <span className="text-base font-bold text-white">{botChainMainnet.name}</span>
-                            <span className="font-mono text-[10px] text-[#9da0ad]">
-                              coming soon
-                            </span>
-                          </button>
+                          {NETWORKS.map((network) => {
+                            const isActive = chain.id === network.id;
+                            return isActive ? (
+                              <div
+                                key={network.id}
+                                className="flex items-center justify-between rounded-2xl bg-aurora-green px-4 py-3 text-[#06120c]"
+                              >
+                                <span className="text-base font-bold">{network.name}</span>
+                                <span className="flex items-center gap-2 text-sm">
+                                  Connected
+                                  <span className="size-2.5 rounded-full bg-[#22e800]" />
+                                </span>
+                              </div>
+                            ) : (
+                              <button
+                                key={network.id}
+                                type="button"
+                                disabled={isSwitchingChain}
+                                onClick={() => {
+                                  switchChain({ chainId: network.id });
+                                  setChainMenuOpen(false);
+                                }}
+                                className="flex items-center justify-between rounded-2xl bg-white/10 px-4 py-3 text-left transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-70"
+                              >
+                                <span className="text-base font-bold text-white">{network.name}</span>
+                                <span className="font-mono text-[10px] text-[#9da0ad]">Switch</span>
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     )}

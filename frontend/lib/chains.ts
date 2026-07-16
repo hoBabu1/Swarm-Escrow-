@@ -24,3 +24,12 @@ export const botChainMainnet = defineChain({
     default: { name: "BOT Scan", url: "https://scan.botchain.ai" },
   },
 });
+
+const EXPLORER_BASE_BY_CHAIN: Record<number, string> = {
+  [botChainTestnet.id]: botChainTestnet.blockExplorers.default.url,
+  [botChainMainnet.id]: botChainMainnet.blockExplorers.default.url,
+};
+
+export function getExplorerBase(chainId: number): string {
+  return EXPLORER_BASE_BY_CHAIN[chainId] ?? botChainTestnet.blockExplorers.default.url;
+}
